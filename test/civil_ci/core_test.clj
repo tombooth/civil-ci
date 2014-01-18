@@ -60,4 +60,21 @@
     (let [path (join test-dir "liuhgq4")]
       (is (nil? (get-server-config path))))))
 
+(deftest test-get-job-config
+
+  (testing "given the spec config, load it"
+    (let [path (join test-dir "job-config")]
+      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+      (let [server-config (get-server-config path)
+            job-config (get-job-config path server-config)]
+        (is (= (-> job-config keys count) 1))
+        (is (= (:name (job-config "some-id")) "Some Job")))))
+
+  (testing "if there as missing job configs those jobs should just be dropped"
+    (let [path (join test-dir "invalid-job-config")]
+      (fs/copy-dir (io/resource "fixtures/invalid-job-config") path)
+      (let [server-config (get-server-config path)
+            job-config (get-job-config path server-config)]
+        (is (= (-> job-config keys count) 1))))))
+
 

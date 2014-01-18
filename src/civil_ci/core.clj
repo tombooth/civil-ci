@@ -24,10 +24,21 @@
         (init-repo path))
       (get-repo path))))
 
+(defn- get-config [file]
+  (if (fs/exists? file)
+      (json/parse-string (slurp file) true)))
+
 (defn get-server-config [path]
-  (let [config-file (io/file path "server.json")]
-    (if (fs/exists? config-file)
-      (json/parse-string (slurp config-file) true))))
+  (get-config (io/file path "server.json")))
+
+(defn get-job-config [path server-config]
+  (reduce (fn [job-hash id]
+            (if-let [config (get-config (io/file path id "job.json"))]
+              (assoc job-hash id config)
+              (do (println (str "job.json missing for job id: " id))
+                  job-hash)))
+          {}
+          (:jobs server-config)))
 
 (def usage-string "Civil CI
 
@@ -51,7 +62,8 @@ Options:
          
      :else (if-let [repo (get-or-create-config-repo path)]
              (if-let [server-config (get-server-config path)]
-               (println "Started")
+               (let [job-config (get-job-config path server-config)]
+                 (println "Started"))
                (println "Failed to load server.json"))
              (println "Failed to load configuration repository")))))
 
