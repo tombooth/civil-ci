@@ -70,7 +70,8 @@ Options:
      :else (if-let [repo (get-or-create-config-repo path (arg-map "--config-template"))]
              (if-let [server-config (get-server-config path)]
                (let [job-config (get-job-config path server-config)]
-                 (httpkit/run-server (http/bind-routes server-config job-config)
+                 (httpkit/run-server (http/bind-routes (atom server-config)
+                                                       (atom job-config))
                                      {:port port})
                  (println "Started"))
                (println "Failed to load server.json"))

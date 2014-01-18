@@ -16,25 +16,25 @@
 
 (deftest test-jobs
   (testing "return a job"
-    (let [routes (bind-routes {} {"some-id" {:name "Some Job"}})
+    (let [routes (bind-routes (atom {}) (atom {"some-id" {:name "Some Job"}}))
           response (make-request "/jobs/some-id" routes {:id "some-id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) {"name" "Some Job"}))))
 
   (testing "404s when no job"
-    (let [routes (bind-routes {} {})
+    (let [routes (bind-routes (atom {}) (atom {}))
           response (make-request "/jobs/foo" routes {:id "foo"})]
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"
-    (let [routes (bind-routes {} {"1" {:name "a"} "2" {:name "b"}})
+    (let [routes (bind-routes (atom {}) (atom {"1" {:name "a"} "2" {:name "b"}}))
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) [{"id" "1" "name" "a"}
                                                    {"id" "2" "name" "b"}]))))
 
   (testing "gets an empty array when no jobs"
-    (let [routes (bind-routes {} {})
+    (let [routes (bind-routes (atom {}) (atom {}))
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) [])))))
