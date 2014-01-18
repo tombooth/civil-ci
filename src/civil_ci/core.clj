@@ -7,21 +7,22 @@
             [clojure.java.io :as io]
             [cheshire.core :as json]))
 
-(defn- init-repo [path]
-  (let [repo (git/git-init path)]
-    repo))
+(defn- init-repo [path template]
+  (if (not (nil? template))
+    (git/git-clone-full template path)
+    (git/git-init path)))
 
 (defn- get-repo [path]
   (if (git/discover-repo path)
     (git/load-repo path)
     nil))
 
-(defn get-or-create-config-repo [path]
+(defn get-or-create-config-repo [path template]
   (if (fs/file? path)
     (println "Config path provided was a file")
     (if (not (fs/exists? path))
       (if (fs/mkdirs path)
-        (init-repo path))
+        (init-repo path template))
       (get-repo path))))
 
 (defn- get-config [file]
@@ -46,8 +47,10 @@ Usage:
   civil-ci [options] <config-path>
 
 Options:
-  -h --help      Show this screen.
-  -v --version   Show version.")
+  -h --help                     Show this screen.
+  -v --version                  Show version.
+  --config-template=<url|path>  Git repo to clone when create a config directory
+                                [default:https://github.com/tombooth/civil-ci-template.git]")
 
 (def version "Civil CI 0.1.0")
 
@@ -60,7 +63,7 @@ Options:
          
      (arg-map "--version")   (println version)
          
-     :else (if-let [repo (get-or-create-config-repo path)]
+     :else (if-let [repo (get-or-create-config-repo path (arg-map "--config-template"))]
              (if-let [server-config (get-server-config path)]
                (let [job-config (get-job-config path server-config)]
                  (println "Started"))
