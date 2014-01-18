@@ -21,7 +21,7 @@
 
   (testing "creates directory if there isn't one"
     (let [path (join test-dir "foo")]
-      (let [repo (get-or-create-config-repo path)] 
+      (let [repo (get-or-create-config-repo path nil)] 
         (is (fs/exists? path))
         (is (not (nil? repo)))
         (is (fs/exists? (join path ".git"))))))
@@ -30,20 +30,20 @@
     (let [path (join test-dir "with-files")]
       (fs/mkdir path)
       (fs/touch (join path "blah.txt"))
-      (let [repo (get-or-create-config-repo path)]
+      (let [repo (get-or-create-config-repo path nil)]
         (is (nil? repo)))))
 
   (testing "if the path is a file then return nil"
     (let [path (join test-dir "file")]
       (fs/touch path)
-      (let [repo (get-or-create-config-repo path)]
+      (let [repo (get-or-create-config-repo path nil)]
         (is (nil? repo)))))
 
   (testing "if there is already a git repo"
     (let [path (join test-dir "git-repo")]
       (fs/mkdir path)
       (git/git-init path)
-      (let [repo (get-or-create-config-repo path)]
+      (let [repo (get-or-create-config-repo path nil)]
         (is (not (nil? repo)))))))
 
 
