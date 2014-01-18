@@ -16,7 +16,7 @@
 
 (deftest test-jobs
   (testing "return a job"
-    (let [routes (bind-routes (atom {}) (atom {"some-id" {:name "Some Job"}}))
+    (let [routes (bind-routes (atom {}) (atom {"some-id" (atom {:name "Some Job"})}))
           response (make-request "/jobs/some-id" routes {:id "some-id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) {"name" "Some Job"}))))
@@ -27,7 +27,8 @@
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"
-    (let [routes (bind-routes (atom {}) (atom {"1" {:name "a"} "2" {:name "b"}}))
+    (let [routes (bind-routes (atom {}) (atom {"1" (atom {:name "a"})
+                                               "2" (atom {:name "b"})}))
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) [{"id" "1" "name" "a"}

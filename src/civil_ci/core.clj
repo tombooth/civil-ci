@@ -27,21 +27,28 @@
         (init-repo path template))
       (get-repo path))))
 
+(defn- add-config-watcher [reference file]
+  (add-watch reference (fs/absolute-path file)
+             (fn [path _ _ new-state]
+               (spit path (json/generate-string new-state)))))
+
 (defn- get-config [file]
   (if (fs/exists? file)
-      (json/parse-string (slurp file) true)))
+    (let [config-ref (atom (json/parse-string (slurp file) true))]
+      (add-config-watcher config-ref file)
+      config-ref)))
 
 (defn get-server-config [path]
   (get-config (io/file path "server.json")))
 
 (defn get-job-config [path server-config]
-  (reduce (fn [job-hash id]
-            (if-let [config (get-config (io/file path id "job.json"))]
-              (assoc job-hash id config)
-              (do (println (str "job.json missing for job id: " id))
-                  job-hash)))
-          {}
-          (:jobs server-config)))
+  (atom (reduce (fn [job-hash id]
+                  (if-let [config (get-config (io/file path id "job.json"))]
+                    (assoc job-hash id config)
+                    (do (println (str "job.json missing for job id: " id))
+                        job-hash)))
+                {}
+                (:jobs @server-config))))
 
 (def usage-string "Civil CI
 
@@ -70,8 +77,7 @@ Options:
      :else (if-let [repo (get-or-create-config-repo path (arg-map "--config-template"))]
              (if-let [server-config (get-server-config path)]
                (let [job-config (get-job-config path server-config)]
-                 (httpkit/run-server (http/bind-routes (atom server-config)
-                                                       (atom job-config))
+                 (httpkit/run-server (http/bind-routes server-config job-config)
                                      {:port port})
                  (println "Started"))
                (println "Failed to load server.json"))

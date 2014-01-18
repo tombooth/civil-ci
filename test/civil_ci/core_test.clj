@@ -3,7 +3,8 @@
             [civil-ci.core :refer :all]
             [clojure.java.io :as io]
             [fs.core :as fs]
-            [clj-jgit.porcelain :as git]))
+            [clj-jgit.porcelain :as git]
+            [cheshire.core :as json]))
 
 (defn join [& args] (fs/absolute-path (apply io/file args)))
 (def test-dir (join (fs/absolute-path fs/*cwd*) "test-fixtures"))
@@ -12,6 +13,9 @@
   (fs/mkdir test-dir)
   (fn)
   (fs/delete-dir test-dir))
+
+(defn read-json-file [path]
+  (if (fs/file? path) (json/parse-string (slurp path) true)))
 
 (use-fixtures :each test-dir-fixture)
 
@@ -53,12 +57,22 @@
     (let [path (join test-dir "server-config")]
       (fs/mkdir path)
       (fs/copy (io/resource "fixtures/server.json") (join path "server.json"))
-      (let [server-config (get-server-config path)]
+      (let [server-config @(get-server-config path)]
         (is (= (:jobs server-config) [])))))
 
   (testing "nil when file is non-existant"
     (let [path (join test-dir "liuhgq4")]
-      (is (nil? (get-server-config path))))))
+      (is (nil? (get-server-config path)))))
+
+  (testing "file config changes then file should reflect it"
+    (let [path (join test-dir "server-config-change")
+          config-path (join path "server.json")]
+      (fs/mkdir path)
+      (fs/copy (io/resource "fixtures/server.json") config-path)
+      (let [mutable-server-config (get-server-config path)]
+        (swap! mutable-server-config assoc :key "value")
+        (is (= (read-json-file config-path)
+               {:jobs [] :key "value"}))))))
 
 (deftest test-get-job-config
 
@@ -66,15 +80,27 @@
     (let [path (join test-dir "job-config")]
       (fs/copy-dir (io/resource "fixtures/spec-config") path)
       (let [server-config (get-server-config path)
-            job-config (get-job-config path server-config)]
+            job-config @(get-job-config path server-config)]
         (is (= (-> job-config keys count) 1))
-        (is (= (:name (job-config "some-id")) "Some Job")))))
+        (is (= (-> (job-config "some-id") deref :name) "Some Job")))))
 
   (testing "if there as missing job configs those jobs should just be dropped"
     (let [path (join test-dir "invalid-job-config")]
       (fs/copy-dir (io/resource "fixtures/invalid-job-config") path)
       (let [server-config (get-server-config path)
-            job-config (get-job-config path server-config)]
-        (is (= (-> job-config keys count) 1))))))
+            job-config @(get-job-config path server-config)]
+        (is (= (-> job-config keys count) 1)))))
+
+  (testing "if a job's config is changed it is reflected in the json file"
+    (let [path (join test-dir "job-config")]
+      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+      (let [server-config (get-server-config path)
+            job-config (get-job-config path server-config)
+            some-id-config (@job-config "some-id")]
+        (swap! some-id-config assoc :key "value")
+        (is (= (read-json-file (join path "some-id/job.json"))
+               {:name "Some Job" :key "value"}))))))
+
+
 
 
