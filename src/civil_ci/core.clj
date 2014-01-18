@@ -7,7 +7,8 @@
             [clojure.java.io :as io]
             [cheshire.core :as json]
             [org.httpkit.server :as httpkit]
-            [civil-ci.http :as http]))
+            [civil-ci.http :as http]
+            [clojure.set :refer [difference]]))
 
 (defn- init-repo [path template]
   (if (not (nil? template))
@@ -41,14 +42,35 @@
 (defn get-server-config [path]
   (get-config (io/file path "server.json")))
 
+(defn- assoc-job-config [path]
+  (fn [job-hash id]
+    (if-let [config (get-config (io/file path id "job.json"))]
+      (assoc job-hash id config)
+      (do (println (str "job.json missing for job id: " id))
+          job-hash))))
+
+(defn- add-jobs-watcher [reference path server-config]
+  (add-watch reference path
+             (fn [path _ old-jobs new-jobs]
+               (let [old-jobs-set (set (keys old-jobs))
+                     new-jobs-set (set (keys new-jobs))
+                     added (difference new-jobs-set old-jobs-set)
+                     removed (difference old-jobs-set new-jobs-set)]
+                 (swap! server-config assoc :jobs (keys new-jobs))
+                 (doall (map #(fs/delete-dir (io/file path %)) removed))
+                 (doall (map #(let [config-file (io/file path % "job.json")
+                                    config (new-jobs %)]
+                                (fs/mkdir (io/file path %))
+                                (spit config-file
+                                      (json/generate-string @config))
+                                (add-config-watcher config config-file))
+                             added))))))
+
 (defn get-job-config [path server-config]
-  (atom (reduce (fn [job-hash id]
-                  (if-let [config (get-config (io/file path id "job.json"))]
-                    (assoc job-hash id config)
-                    (do (println (str "job.json missing for job id: " id))
-                        job-hash)))
-                {}
-                (:jobs @server-config))))
+  (let [job-config (atom (reduce (assoc-job-config path)
+                                 {} (:jobs @server-config)))]
+    (add-jobs-watcher job-config path server-config)
+    job-config))
 
 (def usage-string "Civil CI
 

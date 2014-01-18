@@ -92,14 +92,46 @@
         (is (= (-> job-config keys count) 1)))))
 
   (testing "if a job's config is changed it is reflected in the json file"
-    (let [path (join test-dir "job-config")]
+    (let [path (join test-dir "changing-job-config")]
       (fs/copy-dir (io/resource "fixtures/spec-config") path)
       (let [server-config (get-server-config path)
             job-config (get-job-config path server-config)
             some-id-config (@job-config "some-id")]
         (swap! some-id-config assoc :key "value")
         (is (= (read-json-file (join path "some-id/job.json"))
-               {:name "Some Job" :key "value"}))))))
+               {:name "Some Job" :key "value"})))))
+
+  (testing "if a jobs added files should change"
+    (let [path (join test-dir "add-job-config")]
+      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+      (let [server-config (get-server-config path)
+            job-config (get-job-config path server-config)
+            new-job-config (atom {:name "New Job"})]
+        (swap! job-config assoc "new-job" new-job-config)
+        (is (some #(= % "new-job") (:jobs @server-config)))
+        (is (fs/file? (join path "new-job/job.json")))
+        (is (= (read-json-file (join path "new-job/job.json"))
+               {:name "New Job"})))))
+
+  (testing "if job is removed files should change"
+    (let [path (join test-dir "remove-job-config")]
+      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+      (let [server-config (get-server-config path)
+            job-config (get-job-config path server-config)]
+        (swap! job-config dissoc "some-id")
+        (is (not (some #(= % "some-id") (:jobs @server-config))))
+        (is (not (fs/directory? (join path "some-id")))))))
+
+  (testing "when a job is added, changes should be reflected in the fs"
+    (let [path (join test-dir "add-job-and-change-config")]
+      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+      (let [server-config (get-server-config path)
+            job-config (get-job-config path server-config)
+            new-job-config (atom {:name "New Job"})]
+        (swap! job-config assoc "new-job" new-job-config)
+        (swap! new-job-config assoc :key "value")
+        (is (= (read-json-file (join path "new-job/job.json"))
+               {:name "New Job" :key "value"}))))))
 
 
 
