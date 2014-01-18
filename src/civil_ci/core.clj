@@ -5,7 +5,9 @@
             [fs.core :as fs]
             [clj-jgit.porcelain :as git]
             [clojure.java.io :as io]
-            [cheshire.core :as json]))
+            [cheshire.core :as json]
+            [org.httpkit.server :as httpkit]
+            [civil-ci.http :as http]))
 
 (defn- init-repo [path template]
   (if (not (nil? template))
@@ -49,6 +51,7 @@ Usage:
 Options:
   -h --help                     Show this screen.
   -v --version                  Show version.
+  --port=<port>                 Port for web server. [default:8080]
   --config-template=<url|path>  Git repo to clone when create a config directory
                                 [default:https://github.com/tombooth/civil-ci-template.git]")
 
@@ -56,7 +59,8 @@ Options:
 
 (defn -main [& args]
   (let [arg-map (dm/match-argv (dc/parse usage-string) args)
-        path (arg-map "<config-path>")]
+        path (arg-map "<config-path>")
+        port (Integer/parseInt (arg-map "--port"))]
     (cond
      (or (nil? arg-map)
          (arg-map "--help")) (println usage-string)
@@ -66,6 +70,8 @@ Options:
      :else (if-let [repo (get-or-create-config-repo path (arg-map "--config-template"))]
              (if-let [server-config (get-server-config path)]
                (let [job-config (get-job-config path server-config)]
+                 (httpkit/run-server (http/bind-routes server-config job-config)
+                                     {:port port})
                  (println "Started"))
                (println "Failed to load server.json"))
              (println "Failed to load configuration repository")))))
