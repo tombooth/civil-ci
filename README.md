@@ -10,8 +10,12 @@ There is a Vagrantfile (mainly stolen from [docker](https://github.com/dotcloud/
 
 ```
 $ vagrant up
-$ vagrant ssh
+$ vagrant ssh -- -L 6789:127.0.0.1:6789
+$ cd /var/app
+$ lein repl :headless :port 6789
 ```
+
+You should now be able to attach to the REPL from your local machine and start playing around.
 
 ## License
 
