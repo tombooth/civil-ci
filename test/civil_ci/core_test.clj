@@ -47,4 +47,17 @@
         (is (not (nil? repo)))))))
 
 
+(deftest test-get-server-config
+
+  (testing "given a file it populates"
+    (let [path (join test-dir "server-config")]
+      (fs/mkdir path)
+      (fs/copy (io/resource "fixtures/server.json") (join path "server.json"))
+      (let [server-config (get-server-config path)]
+        (is (= (:jobs server-config) [])))))
+
+  (testing "nil when file is non-existant"
+    (let [path (join test-dir "liuhgq4")]
+      (is (nil? (get-server-config path))))))
+
 

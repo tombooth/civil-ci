@@ -6,5 +6,6 @@
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [clj-jgit "0.6.4"]
                  [docopt "0.6.1"]
-                 [me.raynes/fs "1.4.4"]]
+                 [me.raynes/fs "1.4.4"]
+                 [cheshire "5.2.0"]]
   :main civil-ci.core)
