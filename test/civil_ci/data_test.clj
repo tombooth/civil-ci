@@ -4,6 +4,7 @@
             [clojure.java.io :as io]
             [fs.core :as fs]
             [clj-jgit.porcelain :as git]
+            [clj-jgit.querying :as git-query]
             [cheshire.core :as json]))
 
 (defn join [& args] (fs/absolute-path (apply io/file args)))
@@ -73,6 +74,31 @@
       (git/git-init path)
       (let [repo (get-or-create-config-repo path nil)]
         (is (not (nil? repo)))))))
+
+
+(deftest test-commit
+  (testing "if i stage a change and commit there should be a new revision"
+    (let [path (join test-dir "commit-to-repo")
+          repo (make-config-repo path)]
+      (spit (io/file path "server.json") "blah")
+      (git/git-add (:git repo) "server.json")
+      (commit repo "set server.json to blah")
+      (let [git-repo (:git repo)
+            commits (map #(git-query/commit-info git-repo %)
+                         (git/git-log git-repo))]
+        (is (= (count commits) 2))
+        (is (= "set server.json to blah" (-> commits first :message))))))
+
+  (testing "if repo is nil it doesn't do anything"
+    (let [path (join test-dir "dont-commit-to-repo")
+          repo (make-config-repo path)]
+      (spit (io/file path "server.json") "blah")
+      (git/git-add (:git repo) "server.json")
+      (commit nil "set server.json to blah")
+      (let [git-repo (:git repo)
+            commits (map #(git-query/commit-info git-repo %)
+                         (git/git-log git-repo))]
+        (is (= (count commits) 1))))))
 
 
 (deftest test-get-server-config

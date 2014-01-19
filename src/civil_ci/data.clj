@@ -40,6 +40,10 @@
 (def add-to (git-change-operation git/git-add))
 (def remove-from (git-change-operation git/git-rm))
 
+(defn commit [repo message]
+  (if repo
+    (git/git-commit (:git repo) message)))
+
 (defn- add-config-watcher [reference file repo]
   (add-watch reference (fs/absolute-path file)
              (fn [path _ _ new-state]
