@@ -9,13 +9,19 @@
 (defn join [& args] (fs/absolute-path (apply io/file args)))
 (def test-dir (join (fs/absolute-path fs/*cwd*) "test-fixtures"))
 
+(defn read-json-file [path]
+  (if (fs/file? path) (json/parse-string (slurp path) true)))
+
+(defn make-config-repo
+  ([destination] (make-config-repo destination "fixtures/spec-config"))
+  ([destination source]
+    (fs/copy-dir (io/resource source) destination)
+    (git/git-init destination)))
+
 (defn test-dir-fixture [fn]
   (fs/mkdir test-dir)
   (fn)
   (fs/delete-dir test-dir))
-
-(defn read-json-file [path]
-  (if (fs/file? path) (json/parse-string (slurp path) true)))
 
 (use-fixtures :each test-dir-fixture)
 
@@ -54,11 +60,10 @@
 (deftest test-get-server-config
 
   (testing "given a file it populates"
-    (let [path (join test-dir "server-config")]
-      (fs/mkdir path)
-      (fs/copy (io/resource "fixtures/server.json") (join path "server.json"))
+    (let [path (join test-dir "server-config")
+          repo (make-config-repo path)]
       (let [server-config @(get-server-config path)]
-        (is (= (:jobs server-config) [])))))
+        (is (= (:jobs server-config) ["some-id"])))))
 
   (testing "nil when file is non-existant"
     (let [path (join test-dir "liuhgq4")]
@@ -66,34 +71,33 @@
 
   (testing "file config changes then file should reflect it"
     (let [path (join test-dir "server-config-change")
-          config-path (join path "server.json")]
-      (fs/mkdir path)
-      (fs/copy (io/resource "fixtures/server.json") config-path)
+          config-path (join path "server.json")
+          repo (make-config-repo path)]
       (let [mutable-server-config (get-server-config path)]
         (swap! mutable-server-config assoc :key "value")
         (is (= (read-json-file config-path)
-               {:jobs [] :key "value"}))))))
+               {:jobs ["some-id"] :key "value"}))))))
 
 (deftest test-get-job-config
 
   (testing "given the spec config, load it"
-    (let [path (join test-dir "job-config")]
-      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+    (let [path (join test-dir "job-config")
+          repo (make-config-repo path)]
       (let [server-config (get-server-config path)
             job-config @(get-job-config path server-config)]
         (is (= (-> job-config keys count) 1))
         (is (= (-> (job-config "some-id") deref :name) "Some Job")))))
 
   (testing "if there as missing job configs those jobs should just be dropped"
-    (let [path (join test-dir "invalid-job-config")]
-      (fs/copy-dir (io/resource "fixtures/invalid-job-config") path)
+    (let [path (join test-dir "invalid-job-config")
+          repo (make-config-repo path "fixtures/invalid-job-config")]
       (let [server-config (get-server-config path)
             job-config @(get-job-config path server-config)]
         (is (= (-> job-config keys count) 1)))))
 
   (testing "if a job's config is changed it is reflected in the json file"
-    (let [path (join test-dir "changing-job-config")]
-      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+    (let [path (join test-dir "changing-job-config")
+          repo (make-config-repo path)]
       (let [server-config (get-server-config path)
             job-config (get-job-config path server-config)
             some-id-config (@job-config "some-id")]
@@ -102,8 +106,8 @@
                {:name "Some Job" :key "value"})))))
 
   (testing "if a jobs added files should change"
-    (let [path (join test-dir "add-job-config")]
-      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+    (let [path (join test-dir "add-job-config")
+          repo (make-config-repo path)]
       (let [server-config (get-server-config path)
             job-config (get-job-config path server-config)
             new-job-config (atom {:name "New Job"})]
@@ -114,8 +118,8 @@
                {:name "New Job"})))))
 
   (testing "if job is removed files should change"
-    (let [path (join test-dir "remove-job-config")]
-      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+    (let [path (join test-dir "remove-job-config")
+          repo (make-config-repo path)]
       (let [server-config (get-server-config path)
             job-config (get-job-config path server-config)]
         (swap! job-config dissoc "some-id")
@@ -123,8 +127,8 @@
         (is (not (fs/directory? (join path "some-id")))))))
 
   (testing "when a job is added, changes should be reflected in the fs"
-    (let [path (join test-dir "add-job-and-change-config")]
-      (fs/copy-dir (io/resource "fixtures/spec-config") path)
+    (let [path (join test-dir "add-job-and-change-config")
+          repo (make-config-repo path)]
       (let [server-config (get-server-config path)
             job-config (get-job-config path server-config)
             new-job-config (atom {:name "New Job"})]
