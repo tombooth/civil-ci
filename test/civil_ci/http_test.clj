@@ -41,4 +41,17 @@
       (is (= (json/parse-string (:body response)) [])))))
 
 
+(deftest test-validate
+  (testing "if it doesn't have all manditory then dump"
+    (is (nil? (validate {:name "bar"} [:id]))))
+
+  (testing "if it has more than manditory or optional dump"
+    (is (= (validate {:id "foo" :name "bar" :other 0} [:id] [:name])
+           {:id "foo" :name "bar"})))
+
+  (testing "doesn't mind optional not being there"
+    (is (= (validate {:id "foo"} [:id] [:name])
+           {:id "foo"}))))
+
+
 

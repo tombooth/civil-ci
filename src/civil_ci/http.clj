@@ -4,6 +4,18 @@
             [cheshire.core :as json]))
 
 
+(defn validate
+  ([hash required] (validate hash required []))
+  ([hash required optional]
+     (if (every? hash required)
+       (reduce #(if (contains? hash %2)
+                  (assoc %1 %2 (hash %2))
+                  %1)
+               (reduce #(assoc %1 %2 (hash %2))
+                       {} required)
+               optional))))
+
+
 (defn bind-routes [server-config jobs-config]
   (routes
    (GET "/jobs" []
