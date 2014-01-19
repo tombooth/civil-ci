@@ -9,7 +9,10 @@
   ([resource web-app params]
      (web-app {:request-method :get :uri resource :params params}))
   ([method resource web-app params body]
-     (web-app {:request-method method :uri resource :params params
+     (make-request method resource web-app {} params body))
+  ([method resource web-app headers params body]
+     (web-app {:request-method method :uri resource
+               :headers headers :params params
                :body (java.io.StringReader. body)})))
 
 
@@ -52,7 +55,8 @@
       (let [id (-> @jobs-config keys first)
             job @(@jobs-config id)]
         (is (not (nil? id)))
-        (is (= (:name job) "New Job")))))
+        (is (= (:name job) "New Job"))
+        (is (= (:steps job) [])))))
   
   (testing "if the body is invalid, reject new job"
     (let [server-config (atom {:jobs []})
@@ -60,7 +64,57 @@
           routes (bind-routes nil server-config jobs-config)
           response (make-request :post "/jobs" routes {}
                                  "{\"foo\":\"bar\"}")]
-      (is (= (:status response) 400)))))
+      (is (= (:status response) 400))))
+
+  (testing "receive text/plain and add steps"
+    (let [server-config (atom {:jobs ["id"]})
+          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
+          routes (bind-routes nil server-config jobs-config)
+          response (make-request :post "/jobs/id/steps" routes
+                                 {"content-type" "text/plain"}
+                                 {:id "id"} "some script")]
+      (is (= (:status response) 200))
+      (is (= (-> @(@jobs-config "id") :steps first)
+             {:script "some script"}))))
+
+  (testing "receive application/json and add steps"
+    (let [server-config (atom {:jobs ["id"]})
+          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
+          routes (bind-routes nil server-config jobs-config)
+          response (make-request :post "/jobs/id/steps" routes
+                                 {"content-type" "application/json"}
+                                 {:id "id"} "{\"script\":\"some script\"}")]
+      (is (= (:status response) 200))
+      (is (= (-> @(@jobs-config "id") :steps first)
+             {:script "some script"}))))
+
+  (testing "application/json needs to validate"
+    (let [server-config (atom {:jobs ["id"]})
+          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
+          routes (bind-routes nil server-config jobs-config)
+          response (make-request :post "/jobs/id/steps" routes
+                                 {"content-type" "application/json"}
+                                 {:id "id"} "{\"foo\":\"bar\"}")]
+      (is (= (:status response) 400))))
+
+  (testing "only accept text/plain or application/json for steps atm"
+    (let [server-config (atom {:jobs ["id"]})
+          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
+          routes (bind-routes nil server-config jobs-config)
+          response (make-request :post "/jobs/id/steps" routes
+                                 {"content-type" "blah"}
+                                 {:id "id"} "some script")]
+      (is (= (:status response) 400))))
+
+  (testing "get a list of steps"
+    (let [server-config (atom {:jobs ["id"]})
+          jobs-config (atom {"id" (atom {:name "Job" :steps [{:script "foo"}
+                                                             {:script "bar"}]})})
+          routes (bind-routes nil server-config jobs-config)
+          response (make-request "/jobs/id/steps" routes {:id "id"})]
+      (is (= (:status response) 200))
+      (is (= (json/parse-string (:body response) true)
+             [{:script "foo"} {:script "bar"}])))))
 
 
 (deftest test-validate
