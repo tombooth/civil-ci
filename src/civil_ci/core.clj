@@ -33,7 +33,7 @@ Options:
      :else (if-let [repo (data/get-or-create-config-repo path (arg-map "--config-template"))]
              (if-let [server-config (data/get-server-config path repo)]
                (let [job-config (data/get-job-config path repo server-config)]
-                 (httpkit/run-server (http/bind-routes server-config job-config)
+                 (httpkit/run-server (http/bind-routes repo server-config job-config)
                                      {:port port})
                  (println "Started"))
                (println "Failed to load server.json"))

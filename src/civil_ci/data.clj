@@ -42,7 +42,8 @@
 
 (defn commit [repo message]
   (if repo
-    (git/git-commit (:git repo) message)))
+    (do (println "Committing:" message)
+        (git/git-commit (:git repo) message))))
 
 (defn- add-config-watcher [reference file repo]
   (add-watch reference (fs/absolute-path file)

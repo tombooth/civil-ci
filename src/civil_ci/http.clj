@@ -2,6 +2,7 @@
   (:require [compojure.core :refer :all]
             [compojure.route :as route]
             [cheshire.core :as json]
+            [civil-ci.data :as data]
             [digest]))
 
 
@@ -17,7 +18,7 @@
                optional))))
 
 
-(defn bind-routes [server-config jobs-config]
+(defn bind-routes [repo server-config jobs-config]
   (routes
    (GET "/jobs" []
         (let [jobs (map (fn [[id hash]] (assoc @hash :id id))
@@ -35,6 +36,7 @@
            (if-let [job (validate json [:name])]
              (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
                (swap! jobs-config assoc id (atom job))
+               (data/commit repo (str "A new job with id '" id "' has been added"))
                {:status 200 :body (json/generate-string (assoc job :id id))})
              {:status 400 :body "Invalid job"})))
    

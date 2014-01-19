@@ -16,18 +16,19 @@
 
 (deftest test-jobs
   (testing "return a job"
-    (let [routes (bind-routes (atom {}) (atom {"some-id" (atom {:name "Some Job"})}))
+    (let [routes (bind-routes nil (atom {})
+                              (atom {"some-id" (atom {:name "Some Job"})}))
           response (make-request "/jobs/some-id" routes {:id "some-id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) {"name" "Some Job"}))))
 
   (testing "404s when no job"
-    (let [routes (bind-routes (atom {}) (atom {}))
+    (let [routes (bind-routes nil (atom {}) (atom {}))
           response (make-request "/jobs/foo" routes {:id "foo"})]
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"
-    (let [routes (bind-routes (atom {}) (atom {"1" (atom {:name "a"})
+    (let [routes (bind-routes nil (atom {}) (atom {"1" (atom {:name "a"})
                                                "2" (atom {:name "b"})}))
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
@@ -35,7 +36,7 @@
                                                    {"id" "2" "name" "b"}]))))
 
   (testing "gets an empty array when no jobs"
-    (let [routes (bind-routes (atom {}) (atom {}))
+    (let [routes (bind-routes nil (atom {}) (atom {}))
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) []))))
@@ -43,7 +44,7 @@
   (testing "you can add a new job"
     (let [server-config (atom {:jobs []})
           jobs-config (atom {})
-          routes (bind-routes server-config jobs-config)
+          routes (bind-routes nil server-config jobs-config)
           response (make-request :post "/jobs" routes {}
                                  "{\"name\":\"New Job\"}")]
       (is (= (:status response) 200))
@@ -56,7 +57,7 @@
   (testing "if the body is invalid, reject new job"
     (let [server-config (atom {:jobs []})
           jobs-config (atom {})
-          routes (bind-routes server-config jobs-config)
+          routes (bind-routes nil server-config jobs-config)
           response (make-request :post "/jobs" routes {}
                                  "{\"foo\":\"bar\"}")]
       (is (= (:status response) 400)))))
