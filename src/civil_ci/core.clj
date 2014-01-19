@@ -31,8 +31,8 @@ Options:
      (arg-map "--version")   (println version)
          
      :else (if-let [repo (data/get-or-create-config-repo path (arg-map "--config-template"))]
-             (if-let [server-config (data/get-server-config path)]
-               (let [job-config (data/get-job-config path server-config)]
+             (if-let [server-config (data/get-server-config path repo)]
+               (let [job-config (data/get-job-config path repo server-config)]
                  (httpkit/run-server (http/bind-routes server-config job-config)
                                      {:port port})
                  (println "Started"))
