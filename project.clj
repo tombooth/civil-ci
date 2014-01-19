@@ -9,5 +9,6 @@
                  [me.raynes/fs "1.4.4"]
                  [cheshire "5.2.0"]
                  [http-kit "2.1.16"]
-                 [compojure "1.1.6"]]
+                 [compojure "1.1.6"]
+                 [digest "1.4.3"]]
   :main civil-ci.core)

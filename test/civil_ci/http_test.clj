@@ -38,7 +38,28 @@
     (let [routes (bind-routes (atom {}) (atom {}))
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
-      (is (= (json/parse-string (:body response)) [])))))
+      (is (= (json/parse-string (:body response)) []))))
+
+  (testing "you can add a new job"
+    (let [server-config (atom {:jobs []})
+          jobs-config (atom {})
+          routes (bind-routes server-config jobs-config)
+          response (make-request :post "/jobs" routes {}
+                                 "{\"name\":\"New Job\"}")]
+      (is (= (:status response) 200))
+      (is (not (nil? (json/parse-string (:body response)))))
+      (let [id (-> @jobs-config keys first)
+            job @(@jobs-config id)]
+        (is (not (nil? id)))
+        (is (= (:name job) "New Job")))))
+  
+  (testing "if the body is invalid, reject new job"
+    (let [server-config (atom {:jobs []})
+          jobs-config (atom {})
+          routes (bind-routes server-config jobs-config)
+          response (make-request :post "/jobs" routes {}
+                                 "{\"foo\":\"bar\"}")]
+      (is (= (:status response) 400)))))
 
 
 (deftest test-validate
