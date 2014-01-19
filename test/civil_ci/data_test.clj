@@ -1,6 +1,6 @@
-(ns civil-ci.core-test
+(ns civil-ci.data-test
   (:require [clojure.test :refer :all]
-            [civil-ci.core :refer :all]
+            [civil-ci.data :refer :all]
             [clojure.java.io :as io]
             [fs.core :as fs]
             [clj-jgit.porcelain :as git]
