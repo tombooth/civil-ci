@@ -73,7 +73,15 @@
 
   (testing "doesn't mind optional not being there"
     (is (= (validate {:id "foo"} [:id] [:name])
-           {:id "foo"}))))
+           {:id "foo"})))
+
+  (testing "should allow defaults with optional"
+    (is (= (validate {:id "foo"} [:id] [:name :steps] {:steps []})
+           {:id "foo" :steps []})))
+
+  (testing "passed in should override defaults"
+    (is (= (validate {:id "foo" :steps ["blah"]} [:id] [:name :steps] {:steps []})
+           {:id "foo" :steps ["blah"]}))))
 
 
 

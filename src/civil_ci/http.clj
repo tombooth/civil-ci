@@ -7,14 +7,16 @@
 
 
 (defn validate
-  ([hash required] (validate hash required []))
-  ([hash required optional]
+  ([hash required] (validate hash required [] {}))
+  ([hash required optional] (validate hash required
+                                      optional {}))
+  ([hash required optional defaults]
      (if (every? hash required)
        (reduce #(if (contains? hash %2)
                   (assoc %1 %2 (hash %2))
                   %1)
                (reduce #(assoc %1 %2 (hash %2))
-                       {} required)
+                       defaults required)
                optional))))
 
 
