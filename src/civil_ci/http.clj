@@ -21,7 +21,7 @@
 
 
 (defn- add-step [job step]
-  (let [new-steps (conj (:steps job) step)]
+  (let [new-steps (conj (vec (:steps job)) step)]
     (assoc job :steps new-steps)))
 
 (defn- commit-step [repo job step]

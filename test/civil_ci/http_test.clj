@@ -114,7 +114,18 @@
           response (make-request "/jobs/id/steps" routes {:id "id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
-             [{:script "foo"} {:script "bar"}])))))
+             [{:script "foo"} {:script "bar"}]))))
+
+  (testing "if i add a second step then it is second in order"
+    (let [server-config (atom {:jobs ["id"]})
+          jobs-config (atom {"id" (atom {:name "Job" :steps '({:script "step1"})})})
+          routes (bind-routes nil server-config jobs-config)
+          response (make-request :post "/jobs/id/steps" routes
+                                 {"content-type" "application/json"}
+                                 {:id "id"} "{\"script\":\"step2\"}")]
+      (is (= (:status response) 200))
+      (is (= (:steps @(@jobs-config "id"))
+             [{:script "step1"} {:script "step2"}])))))
 
 
 (deftest test-validate
