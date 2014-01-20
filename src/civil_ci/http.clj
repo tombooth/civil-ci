@@ -6,18 +6,30 @@
             [digest]))
 
 
-(defn validate
-  ([hash required] (validate hash required [] {}))
-  ([hash required optional] (validate hash required
-                                      optional {}))
-  ([hash required optional defaults]
-     (if (every? hash required)
-       (reduce #(if (contains? hash %2)
-                  (assoc %1 %2 (hash %2))
-                  %1)
-               (reduce #(assoc %1 %2 (hash %2))
-                       defaults required)
-               optional))))
+
+(defn validate [hash & rules]
+  (if (empty? rules)
+    hash
+    (let [parts (map #(% hash) rules)]
+      (if (some #(= :missing %) parts)
+        nil
+        (apply merge {} (filter #(not (nil? %)) parts))))))
+
+(defn required [key & sub-rules]
+  (fn [hash]
+    (if-let [value (apply validate (hash key) sub-rules)]
+      {key value}
+      :missing)))
+
+(defn optional [key & sub-rules]
+  (fn [hash]
+    (if-let [value (apply validate (hash key) sub-rules)]
+      {key value})))
+
+(defn default [hash]
+  (fn [_]
+    hash))
+
 
 
 (defn- add-step [job step]
@@ -39,7 +51,10 @@
    (POST "/jobs" [id :as request]
          (let [body (slurp (:body request))
                json (json/parse-string body true)]
-           (if-let [job (validate json [:name] [:steps] {:steps []})]
+           (if-let [job (validate json
+                                  (default {:steps []})
+                                  (required :name)
+                                  (optional :steps))]
              (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
                (swap! jobs-config assoc id (atom job))
                (data/commit repo (str "A new job with id '" id "' has been added"))
@@ -62,7 +77,8 @@
                             
                             (= content-type "application/json")
                             (let [json (json/parse-string (slurp (:body request)) true)]
-                              (if-let [step (validate json [:script])]
+                              (if-let [step (validate json
+                                                      (required :script))]
                                 (commit-step repo job step)
                                 {:status 400 :body "Invalid step"}))
                             
