@@ -62,6 +62,25 @@ POST /jobs/:id/build/run
 GET  /jobs/:id/build/run/:id
      Returns the history of one particular run
 
+GET  /users
+     Get a list of users
+POST /users/:username
+     Add a user with given username
+GET  /users/:username
+     Get a user by username
+
+GET  /roles
+     Get a list of roles
+POST /roles/:id
+     Add a new role with an id (like 'admin')
+GET  /roles/:id
+     Get the details of a role
+
+POST /session
+     Create an authenticated session, returns a token to set as a header.
+GET  /session/:token
+     Get the details of a session by the token
+
 ```
 
 ## License
