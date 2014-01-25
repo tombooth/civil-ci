@@ -9,14 +9,43 @@
 
 
 
-(defn- add-step [job step]
-  (let [new-steps (conj (vec (:steps job)) step)]
-    (assoc job :steps new-steps)))
+(defn- add-step [job key step]
+  (let [build (job key)
+        new-steps (conj (vec (:steps build)) step)
+        new-build (assoc build :steps new-steps)]
+    (assoc job key new-build)))
 
-(defn- commit-step [repo job step]
-  (swap! job add-step step)
+(defn- commit-step [repo job key step]
+  (swap! job add-step key step)
   (data/commit repo "Added a new build step")
   {:status 200 :body (json/generate-string step)})
+
+
+
+(defn build-routes [repo job key]
+  (routes (POST "/steps" [:as request]
+                (if-let [content-type ((:headers request) "content-type")]
+                  (cond (= content-type "text/plain")
+                        (let [script (slurp (:body request))
+                              step {:script script}]
+                          (commit-step repo job key step))
+                        
+                        (= content-type "application/json")
+                        (let [json (json/parse-string (slurp (:body request)) true)]
+                          (if-let [step (validate json
+                                                  (required :script))]
+                            (commit-step repo job key step)
+                            {:status 400 :body "Invalid step"}))
+                        
+                        :else
+                        {:status 400 :body "Invalid content-type"})
+                  {:status 400 :body "content-type header required"}))
+
+          (GET "/steps" []
+               {:status 200
+                :body (json/generate-string (:steps (@job key)))})))
+
+
 
 (defn bind-routes [repo server-config jobs-config]
   (routes
@@ -29,9 +58,10 @@
          (let [body (slurp (:body request))
                json (json/parse-string body true)]
            (if-let [job (validate json
-                                  (default {:steps []})
+                                  (default {:workspace {:steps []}})
                                   (required :name)
-                                  (optional :steps))]
+                                  (optional :workspace
+                                            (optional :steps)))]
              (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
                (swap! jobs-config assoc id (atom job))
                (data/commit repo (str "A new job with id '" id "' has been added"))
@@ -45,27 +75,13 @@
 
    (context "/jobs/:id" [id]
             (let-routes [job (@jobs-config id)]
-              (POST "/steps" [:as request]
-                    (if-let [content-type ((:headers request) "content-type")]
-                      (cond (= content-type "text/plain")
-                            (let [script (slurp (:body request))
-                                  step {:script script}]
-                              (commit-step repo job step))
-                            
-                            (= content-type "application/json")
-                            (let [json (json/parse-string (slurp (:body request)) true)]
-                              (if-let [step (validate json
-                                                      (required :script))]
-                                (commit-step repo job step)
-                                {:status 400 :body "Invalid step"}))
-                            
-                            :else
-                            {:status 400 :body "Invalid content-type"})
-                      {:status 400 :body "content-type header required"}))
-
-              (GET "/steps" []
-                   {:status 200
-                    :body (json/generate-string (:steps @job))})))
+                        (context "/workspace" []
+                                 (build-routes repo job :workspace))))
    
    (route/not-found "Endpoint not found")))
+
+
+
+
+
 

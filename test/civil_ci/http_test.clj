@@ -56,7 +56,7 @@
             job @(@jobs-config id)]
         (is (not (nil? id)))
         (is (= (:name job) "New Job"))
-        (is (= (:steps job) [])))))
+        (is (= (:workspace job) {:steps []})))))
   
   (testing "if the body is invalid, reject new job"
     (let [server-config (atom {:jobs []})
@@ -64,69 +64,63 @@
           routes (bind-routes nil server-config jobs-config)
           response (make-request :post "/jobs" routes {}
                                  "{\"foo\":\"bar\"}")]
-      (is (= (:status response) 400))))
+      (is (= (:status response) 400)))))
 
+
+(deftest test-build-routes
   (testing "receive text/plain and add steps"
-    (let [server-config (atom {:jobs ["id"]})
-          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
-          routes (bind-routes nil server-config jobs-config)
-          response (make-request :post "/jobs/id/steps" routes
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          routes (build-routes nil job :workspace)
+          response (make-request :post "/steps" routes
                                  {"content-type" "text/plain"}
                                  {:id "id"} "some script")]
       (is (= (:status response) 200))
-      (is (= (-> @(@jobs-config "id") :steps first)
+      (is (= (-> @job :workspace :steps first)
              {:script "some script"}))))
 
   (testing "receive application/json and add steps"
-    (let [server-config (atom {:jobs ["id"]})
-          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
-          routes (bind-routes nil server-config jobs-config)
-          response (make-request :post "/jobs/id/steps" routes
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          routes (build-routes nil job :workspace)
+          response (make-request :post "/steps" routes
                                  {"content-type" "application/json"}
                                  {:id "id"} "{\"script\":\"some script\"}")]
       (is (= (:status response) 200))
-      (is (= (-> @(@jobs-config "id") :steps first)
+      (is (= (-> @job :workspace :steps first)
              {:script "some script"}))))
 
   (testing "application/json needs to validate"
-    (let [server-config (atom {:jobs ["id"]})
-          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
-          routes (bind-routes nil server-config jobs-config)
-          response (make-request :post "/jobs/id/steps" routes
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          routes (build-routes nil job :workspace)
+          response (make-request :post "/steps" routes
                                  {"content-type" "application/json"}
                                  {:id "id"} "{\"foo\":\"bar\"}")]
       (is (= (:status response) 400))))
 
   (testing "only accept text/plain or application/json for steps atm"
-    (let [server-config (atom {:jobs ["id"]})
-          jobs-config (atom {"id" (atom {:name "Job" :steps []})})
-          routes (bind-routes nil server-config jobs-config)
-          response (make-request :post "/jobs/id/steps" routes
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          routes (build-routes nil job :workspace)
+          response (make-request :post "/steps" routes
                                  {"content-type" "blah"}
                                  {:id "id"} "some script")]
       (is (= (:status response) 400))))
 
   (testing "get a list of steps"
-    (let [server-config (atom {:jobs ["id"]})
-          jobs-config (atom {"id" (atom {:name "Job" :steps [{:script "foo"}
-                                                             {:script "bar"}]})})
-          routes (bind-routes nil server-config jobs-config)
-          response (make-request "/jobs/id/steps" routes {:id "id"})]
+    (let [job (atom {:name "Job" :workspace {:steps [{:script "foo"}
+                                                     {:script "bar"}]}})
+          routes (build-routes nil job :workspace)
+          response (make-request "/steps" routes {:id "id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
              [{:script "foo"} {:script "bar"}]))))
 
   (testing "if i add a second step then it is second in order"
-    (let [server-config (atom {:jobs ["id"]})
-          jobs-config (atom {"id" (atom {:name "Job" :steps '({:script "step1"})})})
-          routes (bind-routes nil server-config jobs-config)
-          response (make-request :post "/jobs/id/steps" routes
+    (let [job (atom {:name "Job" :workspace {:steps '({:script "step1"})}})
+          routes (build-routes nil job :workspace)
+          response (make-request :post "/steps" routes
                                  {"content-type" "application/json"}
                                  {:id "id"} "{\"script\":\"step2\"}")]
       (is (= (:status response) 200))
-      (is (= (:steps @(@jobs-config "id"))
+      (is (= (-> @job :workspace :steps)
              [{:script "step1"} {:script "step2"}])))))
-
-
 
 
