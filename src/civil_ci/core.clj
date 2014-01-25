@@ -10,6 +10,8 @@
 
 Usage:
   civil-ci [options] <config-path>
+  civil-ci -h | --help
+  civil-ci -v | --version
 
 Options:
   -h --help                     Show this screen.
