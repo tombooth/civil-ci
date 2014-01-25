@@ -8,23 +8,27 @@
 
 
 (defn validate [hash & rules]
-  (if (empty? rules)
-    hash
-    (let [parts (map #(% hash) rules)]
-      (if (some #(= :missing %) parts)
-        nil
-        (apply merge {} (filter #(not (nil? %)) parts))))))
+  (if hash
+    (if (empty? rules)
+      hash
+      (let [parts (map #(% hash) rules)]
+        (if (some #(= :missing %) parts)
+          nil
+          (apply merge {} (filter #(not (nil? %)) parts)))))
+    nil))
 
-(defn required [key & sub-rules]
-  (fn [hash]
-    (if-let [value (apply validate (hash key) sub-rules)]
-      {key value}
-      :missing)))
+(defn- check-and-fail-with [fail-val]
+  (fn [key & sub-rules]
+    (fn [hash]
+      (if hash
+       (if-let [value (apply validate (hash key) sub-rules)]
+         {key value}
+         fail-val)
+       fail-val))))
 
-(defn optional [key & sub-rules]
-  (fn [hash]
-    (if-let [value (apply validate (hash key) sub-rules)]
-      {key value})))
+(def required (check-and-fail-with :missing))
+
+(def optional (check-and-fail-with nil))
 
 (defn default [hash]
   (fn [_]

@@ -175,7 +175,17 @@
     (is (= (validate {:foo {:bar "1" :other "2"}}
                      (required :foo
                                (optional :bar)))
-           {:foo {:bar "1"}}))))
+           {:foo {:bar "1"}})))
+  
+  (testing "multiple levels of optional"
+    (is (= (validate {} (optional :foo
+                                  (optional :bar)))
+           {})))
+
+  (testing "an optional with a required"
+    (is (= (validate {:foo {}} (optional :foo
+                                         (required :bar)))
+           {}))))
 
 
 
