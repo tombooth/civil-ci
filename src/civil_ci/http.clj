@@ -58,9 +58,12 @@
          (let [body (slurp (:body request))
                json (json/parse-string body true)]
            (if-let [job (validate json
-                                  (default {:workspace {:steps []}})
+                                  (default {:workspace {:steps []}
+                                            :build {:steps []}})
                                   (required :name)
                                   (optional :workspace
+                                            (optional :steps))
+                                  (optional :build
                                             (optional :steps)))]
              (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
                (swap! jobs-config assoc id (atom job))
@@ -76,7 +79,9 @@
    (context "/jobs/:id" [id]
             (let-routes [job (@jobs-config id)]
                         (context "/workspace" []
-                                 (build-routes repo job :workspace))))
+                                 (build-routes repo job :workspace))
+                        (context "/build" []
+                                 (build-routes repo job :build))))
    
    (route/not-found "Endpoint not found")))
 
