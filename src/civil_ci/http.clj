@@ -31,6 +31,9 @@
     history-atom
     (add-history jobs-history id)))
 
+(defn- add-history-item [history key item]
+  (let [build-history (history key)]
+    (assoc history key (conj build-history item))))
 
 
 (defn build-routes [repo job history key build-queue]
@@ -58,8 +61,15 @@
 
           (GET "/run" []
                {:status 200
-                :body (json/generate-string (@history key))})))
+                :body (json/generate-string (@history key))})
 
+          (POST "/run" []
+                (let [id (digest/sha1 (str (:name @job) (System/currentTimeMillis) (rand-int 1000)))
+                      queue-item {:id id :type key :config (@job key)}
+                      history-item {:id id :status "queued"}]
+                  (swap! build-queue conj queue-item)
+                  (swap! history add-history-item key history-item)
+                  {:status 200 :body (json/generate-string history-item)}))))
 
 
 

@@ -160,6 +160,25 @@
           response (make-request "/run" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
-             [])))))
+             []))))
+
+  (testing "when we run a build it causes history to be added and a build to be queued"
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          history (atom {:workspace []})
+          queue (atom [])
+          routes (build-routes nil job history :workspace queue)
+          response (make-request :post "/run" routes {} "")]
+      (is (= (:status response) 200))
+      (is (= (count @queue) 1))
+      (is (= (count (-> @history :workspace)) 1))
+      (let [history-item (-> @history :workspace first)
+            queue-item (-> @queue first)]
+        (is (= (:id history-item) (:id queue-item)))
+        (is (= (:config queue-item)
+               (-> @job :workspace)))
+        (is (= (:type queue-item) :workspace))
+        (is (= (:status history-item) "queued"))
+        (is (= (json/parse-string (:body response) true)
+               history-item))))))
 
 
