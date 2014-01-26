@@ -23,3 +23,11 @@
       (is (= @buffer ["bar"])))))
 
 
+(deftest test-set-history
+  (testing "it should actually do what we want it to"
+    (let [history (atom {:workspace [{:id "foo"} {:id "bar"}]})]
+      (swap! history worker/set-history "foo" :workspace {:blah true})
+      (is (= (:workspace @history)
+             [{:id "foo" :blah true} {:id "bar"}])))))
+
+

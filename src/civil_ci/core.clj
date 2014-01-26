@@ -20,14 +20,17 @@ Options:
   -v --version                  Show version.
   --port=<port>                 Port for web server. [default:8080]
   --config-template=<url|path>  Git repo to clone when create a config directory
-                                [default:https://github.com/tombooth/civil-ci-template.git]")
+                                [default:https://github.com/tombooth/civil-ci-template.git]
+  --workers=<num>               Number of worker threads. [default:2]
+")
 
 (def version "Civil CI 0.1.0")
 
 (defn -main [& args]
   (let [arg-map (dm/match-argv (dc/parse usage-string) args)
         path (arg-map "<config-path>")
-        port (Integer/parseInt (arg-map "--port"))]
+        port (Integer/parseInt (arg-map "--port"))
+        num-workers (Integer/parseInt (arg-map "--workers"))]
     (cond
      (or (nil? arg-map)
          (arg-map "--help")) (println usage-string)
@@ -44,6 +47,7 @@ Options:
                                                        job-config job-history
                                                        build-channel build-buffer)
                                      {:port port})
+                 (worker/create-n num-workers build-channel job-history)
                  (println "Started"))
                (println "Failed to load server.json"))
              (println "Failed to load configuration repository")))))
