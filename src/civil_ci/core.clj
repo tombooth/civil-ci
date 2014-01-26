@@ -4,7 +4,8 @@
             [docopt.match :as dm]
             [org.httpkit.server :as httpkit]
             [civil-ci.http :as http]
-            [civil-ci.data :as data]))
+            [civil-ci.data :as data]
+            [civil-ci.git :as git]))
 
 (def usage-string "Civil CI
 
@@ -32,7 +33,7 @@ Options:
          
      (arg-map "--version")   (println version)
          
-     :else (if-let [repo (data/get-or-create-config-repo path (arg-map "--config-template"))]
+     :else (if-let [repo (git/get-or-create-config-repo path (arg-map "--config-template"))]
              (if-let [server-config (data/get-server-config path repo)]
                (let [job-config (data/get-job-config path repo server-config)]
                  (httpkit/run-server (http/bind-routes repo server-config job-config)

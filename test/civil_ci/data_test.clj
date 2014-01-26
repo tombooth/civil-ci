@@ -1,104 +1,14 @@
 (ns civil-ci.data-test
   (:require [clojure.test :refer :all]
+            [civil-ci.common-test :refer :all]
             [civil-ci.data :refer :all]
             [clojure.java.io :as io]
             [fs.core :as fs]
             [clj-jgit.porcelain :as git]
-            [clj-jgit.querying :as git-query]
             [cheshire.core :as json]))
 
-(defn join [& args] (fs/absolute-path (apply io/file args)))
-(def test-dir (join (fs/absolute-path fs/*cwd*) "test-fixtures"))
-
-(defn read-json-file [path]
-  (if (fs/file? path) (json/parse-string (slurp path) true)))
-
-(defn make-config-repo
-  ([destination] (make-config-repo destination "fixtures/spec-config"))
-  ([destination source]
-    (fs/copy-dir (io/resource source) destination)
-    (let [repo (git/git-init destination)]
-      (git/git-add repo ".")
-      (git/git-commit repo "Initial commit")
-      {:git repo
-       :root destination})))
-
-(defn status-category-in? [repo category relative-path]
-  (let [status (git/git-status (:git repo))
-        changed-set (status category)]
-    (changed-set relative-path)))
-
-(defn changed-in? [repo relative-path]
-  (status-category-in? repo :changed relative-path))
-
-(defn added-in? [repo relative-path]
-  (status-category-in? repo :added relative-path))
-
-(defn removed-from? [repo relative-path]
-  (status-category-in? repo :removed relative-path))
-
-(defn test-dir-fixture [fn]
-  (fs/mkdir test-dir)
-  (fn)
-  (fs/delete-dir test-dir))
 
 (use-fixtures :each test-dir-fixture)
-
-
-
-(deftest test-get-or-create-config-repo
-
-  (testing "creates directory if there isn't one"
-    (let [path (join test-dir "foo")]
-      (let [repo (get-or-create-config-repo path nil)] 
-        (is (fs/exists? path))
-        (is (not (nil? repo)))
-        (is (fs/exists? (join path ".git"))))))
-
-  (testing "if the directory has files (but not .git) in it then return nil"
-    (let [path (join test-dir "with-files")]
-      (fs/mkdir path)
-      (fs/touch (join path "blah.txt"))
-      (let [repo (get-or-create-config-repo path nil)]
-        (is (nil? repo)))))
-
-  (testing "if the path is a file then return nil"
-    (let [path (join test-dir "file")]
-      (fs/touch path)
-      (let [repo (get-or-create-config-repo path nil)]
-        (is (nil? repo)))))
-
-  (testing "if there is already a git repo"
-    (let [path (join test-dir "git-repo")]
-      (fs/mkdir path)
-      (git/git-init path)
-      (let [repo (get-or-create-config-repo path nil)]
-        (is (not (nil? repo)))))))
-
-
-(deftest test-commit
-  (testing "if i stage a change and commit there should be a new revision"
-    (let [path (join test-dir "commit-to-repo")
-          repo (make-config-repo path)]
-      (spit (io/file path "server.json") "blah")
-      (git/git-add (:git repo) "server.json")
-      (commit repo "set server.json to blah")
-      (let [git-repo (:git repo)
-            commits (map #(git-query/commit-info git-repo %)
-                         (git/git-log git-repo))]
-        (is (= (count commits) 2))
-        (is (= "set server.json to blah" (-> commits first :message))))))
-
-  (testing "if repo is nil it doesn't do anything"
-    (let [path (join test-dir "dont-commit-to-repo")
-          repo (make-config-repo path)]
-      (spit (io/file path "server.json") "blah")
-      (git/git-add (:git repo) "server.json")
-      (commit nil "set server.json to blah")
-      (let [git-repo (:git repo)
-            commits (map #(git-query/commit-info git-repo %)
-                         (git/git-log git-repo))]
-        (is (= (count commits) 1))))))
 
 
 (deftest test-get-server-config

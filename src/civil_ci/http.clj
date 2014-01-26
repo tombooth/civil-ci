@@ -4,6 +4,7 @@
             [compojure.route :as route]
             [cheshire.core :as json]
             [civil-ci.data :as data]
+            [civil-ci.git :as git]
             [digest]))
 
 
@@ -17,7 +18,7 @@
 
 (defn- commit-step [repo job key step]
   (swap! job add-step key step)
-  (data/commit repo "Added a new build step")
+  (git/commit repo "Added a new build step")
   {:status 200 :body (json/generate-string step)})
 
 
@@ -67,7 +68,7 @@
                                             (optional :steps)))]
              (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
                (swap! jobs-config assoc id (atom job))
-               (data/commit repo (str "A new job with id '" id "' has been added"))
+               (git/commit repo (str "A new job with id '" id "' has been added"))
                {:status 200 :body (json/generate-string (assoc job :id id))})
              {:status 400 :body "Invalid job"})))
    
