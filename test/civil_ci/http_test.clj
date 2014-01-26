@@ -182,6 +182,22 @@
         (is (= (:type build-item) :workspace))
         (is (= (:status history-item) "queued"))
         (is (= (json/parse-string (:body response) true)
-               history-item))))))
+               history-item)))))
+
+  (testing "get a history item by id"
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          history (atom {:workspace [{:id "foo" :blah true} {:id "bar" :blah false}]})
+          routes (build-routes nil job history :workspace nil)
+          response (make-request "/run/foo" routes {:id "foo"})]
+      (is (= (:status response) 200))
+      (is (= (json/parse-string (:body response) true)
+             {:id "foo" :blah true}))))
+
+  (testing "get an invalid history item by id"
+    (let [job (atom {:name "Job" :workspace {:steps []}})
+          history (atom {:workspace []})
+          routes (build-routes nil job history :workspace nil)
+          response (make-request "/run/foo" routes {:id "foo"})]
+      (is (= (:status response) 404)))))
 
 

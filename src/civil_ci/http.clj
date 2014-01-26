@@ -70,7 +70,12 @@
                       history-item {:id id :status "queued"}]
                   (async/>!! build-channel build-item)
                   (swap! history add-history-item key history-item)
-                  {:status 200 :body (json/generate-string history-item)}))))
+                  {:status 200 :body (json/generate-string history-item)}))
+
+          (GET "/run/:id" [id]
+               (if-let [history-item (first (filter #(= id (:id %)) (@history key)))]
+                 {:status 200 :body (json/generate-string history-item)}
+                 {:status 404 :body "Invalid run id"}))))
 
 
 
