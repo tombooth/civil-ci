@@ -69,6 +69,19 @@
       (do (println (str "job.json missing for job id: " id))
           job-hash))))
 
+(defn- add-job [path id config repo]
+  (let [config-file (io/file path id "job.json")]
+    (fs/mkdir (io/file path id))
+    (spit config-file
+          (json/generate-string @config))
+    (add-to repo (fs/absolute-path config-file))
+    (add-config-watcher config config-file repo)))
+
+(defn- remove-job [path id repo]
+  (let [job-dir (io/file path id)]
+    (fs/delete-dir job-dir)
+    (remove-from repo (str (fs/absolute-path job-dir)))))
+
 (defn- add-jobs-watcher [reference path repo server-config]
   (add-watch reference path
              (fn [path _ old-jobs new-jobs]
@@ -77,18 +90,8 @@
                      added (difference new-jobs-set old-jobs-set)
                      removed (difference old-jobs-set new-jobs-set)]
                  (swap! server-config assoc :jobs (keys new-jobs))
-                 (doall (map #(let [job-dir (io/file path %)]
-                                (fs/delete-dir job-dir)
-                                (remove-from repo (str (fs/absolute-path job-dir))))
-                             removed))
-                 (doall (map #(let [config-file (io/file path % "job.json")
-                                    config (new-jobs %)]
-                                (fs/mkdir (io/file path %))
-                                (spit config-file
-                                      (json/generate-string @config))
-                                (add-to repo (fs/absolute-path config-file))
-                                (add-config-watcher config config-file repo))
-                             added))))))
+                 (doall (map #(remove-job path % repo) removed))
+                 (doall (map #(add-job path % (new-jobs %) repo) added))))))
 
 (defn get-job-config [path repo server-config]
   (let [job-config (atom (reduce (assoc-job-config path repo)
