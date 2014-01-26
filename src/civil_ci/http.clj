@@ -33,7 +33,7 @@
 
 
 
-(defn build-routes [repo job history key]
+(defn build-routes [repo job history key build-queue]
   (routes (POST "/steps" [:as request]
                 (if-let [content-type ((:headers request) "content-type")]
                   (cond (= content-type "text/plain")
@@ -62,7 +62,8 @@
 
 
 
-(defn bind-routes [repo server-config jobs-config jobs-history]
+
+(defn bind-routes [repo server-config jobs-config jobs-history build-queue]
   (routes
    (GET "/jobs" []
         (let [jobs (map (fn [[id hash]] (assoc @hash :id id))
@@ -95,11 +96,13 @@
    (context "/jobs/:id" [id]
             (let-routes [job (@jobs-config id)
                          history (get-history jobs-history id)]
-                        (GET "/run" [] {:status 200})
+                        (POST "/run" [] {:status 307 :headers {"Location" (str "/jobs/" id "/build/run")}})
                         (context "/workspace" []
-                                 (build-routes repo job history :workspace))
+                                 (build-routes repo job history :workspace build-queue))
                         (context "/build" []
-                                 (build-routes repo job history :build))))
+                                 (build-routes repo job history :build build-queue))))
+
+   (GET "/queue" [] {:status 200 :body (json/generate-string @build-queue)})
    
    (route/not-found "Endpoint not found")))
 
