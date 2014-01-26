@@ -45,16 +45,33 @@
     (do (println "Committing:" message)
         (git/git-commit (:git repo) message))))
 
-(defn- add-config-watcher [reference file repo]
+
+
+
+(defn- add-value-watcher [reference file repo]
   (add-watch reference (fs/absolute-path file)
              (fn [path _ _ new-state]
                (spit path (json/generate-string new-state))
                (add-to repo path))))
 
+(defn- add-hash-watcher [reference path changed-fn add-fn remove-fn]
+  (add-watch reference path
+             (fn [path _ old-hash new-hash]
+               (let [old-key-set (set (keys old-hash))
+                     new-key-set (set (keys new-hash))
+                     added (difference new-key-set old-key-set)
+                     removed (difference old-key-set new-key-set)
+                     new-keys (keys new-hash)]
+                 (changed-fn new-keys)
+                 (doall (map remove-fn removed))
+                 (doall (map #(add-fn % (new-hash %)) added))))))
+
+
+
 (defn- get-config [file repo]
   (if (fs/exists? file)
     (let [config-ref (atom (json/parse-string (slurp file) true))]
-      (add-config-watcher config-ref file repo)
+      (add-value-watcher config-ref file repo)
       config-ref)))
 
 (defn get-server-config [path repo]
@@ -75,27 +92,21 @@
     (spit config-file
           (json/generate-string @config))
     (add-to repo (fs/absolute-path config-file))
-    (add-config-watcher config config-file repo)))
+    (add-value-watcher config config-file repo)))
 
 (defn- remove-job [path id repo]
   (let [job-dir (io/file path id)]
     (fs/delete-dir job-dir)
     (remove-from repo (str (fs/absolute-path job-dir)))))
 
-(defn- add-jobs-watcher [reference path repo server-config]
-  (add-watch reference path
-             (fn [path _ old-jobs new-jobs]
-               (let [old-jobs-set (set (keys old-jobs))
-                     new-jobs-set (set (keys new-jobs))
-                     added (difference new-jobs-set old-jobs-set)
-                     removed (difference old-jobs-set new-jobs-set)]
-                 (swap! server-config assoc :jobs (keys new-jobs))
-                 (doall (map #(remove-job path % repo) removed))
-                 (doall (map #(add-job path % (new-jobs %) repo) added))))))
 
 (defn get-job-config [path repo server-config]
   (let [job-config (atom (reduce (assoc-job-config path repo)
                                  {} (:jobs @server-config)))]
-    (add-jobs-watcher job-config path repo server-config)
+    (add-hash-watcher job-config path
+                      #(swap! server-config assoc :jobs %)
+                      #(add-job path %1 %2 repo )
+                      #(remove-job path % repo))
     job-config))
+
 
