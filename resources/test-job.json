@@ -1,0 +1,10 @@
+{
+  "name": "Test Job",
+  "workspace": {
+    "steps": ["#!/bin/bash\necho 'Hello!'",
+              "#!/bin/bash\napt-get install -y postgresql-9.1"]
+  },
+  "build": {
+    "steps": ["#!/bin/bash\necho 'Running a build!'"]
+  }
+}
