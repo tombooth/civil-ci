@@ -71,4 +71,6 @@
 (defn get-job-config [path repo server-config]
   (get-hash path "job.json" repo server-config :jobs))
 
+(defn get-job-history [path server-config]
+  (get-hash path "history.json" nil server-config :jobs))
 

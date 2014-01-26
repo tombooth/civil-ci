@@ -21,9 +21,19 @@
   (git/commit repo "Added a new build step")
   {:status 200 :body (json/generate-string step)})
 
+(defn- add-history [jobs-history id]
+  (let [history-atom (atom {:workspace [] :build []})]
+    (swap! jobs-history assoc id history-atom)
+    history-atom))
+
+(defn- get-history [jobs-history id]
+  (if-let [history-atom (@jobs-history id)]
+    history-atom
+    (add-history jobs-history id)))
 
 
-(defn build-routes [repo job key]
+
+(defn build-routes [repo job history key]
   (routes (POST "/steps" [:as request]
                 (if-let [content-type ((:headers request) "content-type")]
                   (cond (= content-type "text/plain")
@@ -44,11 +54,15 @@
 
           (GET "/steps" []
                {:status 200
-                :body (json/generate-string (:steps (@job key)))})))
+                :body (json/generate-string (:steps (@job key)))})
+
+          (GET "/run" []
+               {:status 200
+                :body (json/generate-string (@history key))})))
 
 
 
-(defn bind-routes [repo server-config jobs-config]
+(defn bind-routes [repo server-config jobs-config jobs-history]
   (routes
    (GET "/jobs" []
         (let [jobs (map (fn [[id hash]] (assoc @hash :id id))
@@ -68,6 +82,7 @@
                                             (optional :steps)))]
              (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
                (swap! jobs-config assoc id (atom job))
+               (add-history jobs-history id)
                (git/commit repo (str "A new job with id '" id "' has been added"))
                {:status 200 :body (json/generate-string (assoc job :id id))})
              {:status 400 :body "Invalid job"})))
@@ -78,11 +93,13 @@
           {:status 404 :body "Job not found"}))
 
    (context "/jobs/:id" [id]
-            (let-routes [job (@jobs-config id)]
+            (let-routes [job (@jobs-config id)
+                         history (get-history jobs-history id)]
+                        (GET "/run" [] {:status 200})
                         (context "/workspace" []
-                                 (build-routes repo job :workspace))
+                                 (build-routes repo job history :workspace))
                         (context "/build" []
-                                 (build-routes repo job :build))))
+                                 (build-routes repo job history :build))))
    
    (route/not-found "Endpoint not found")))
 
