@@ -97,7 +97,7 @@
   (testing "receive text/plain and add steps"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request :post "/steps" routes
                                  {"content-type" "text/plain"}
                                  {:id "id"} "some script")]
@@ -108,7 +108,7 @@
   (testing "receive application/json and add steps"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request :post "/steps" routes
                                  {"content-type" "application/json"}
                                  {:id "id"} "{\"script\":\"some script\"}")]
@@ -119,7 +119,7 @@
   (testing "application/json needs to validate"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request :post "/steps" routes
                                  {"content-type" "application/json"}
                                  {:id "id"} "{\"foo\":\"bar\"}")]
@@ -128,7 +128,7 @@
   (testing "only accept text/plain or application/json for steps atm"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request :post "/steps" routes
                                  {"content-type" "blah"}
                                  {:id "id"} "some script")]
@@ -138,7 +138,7 @@
     (let [job (atom {:name "Job" :workspace {:steps [{:script "foo"}
                                                      {:script "bar"}]}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request "/steps" routes {:id "id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
@@ -147,7 +147,7 @@
   (testing "if i add a second step then it is second in order"
     (let [job (atom {:name "Job" :workspace {:steps '({:script "step1"})}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request :post "/steps" routes
                                  {"content-type" "application/json"}
                                  {:id "id"} "{\"script\":\"step2\"}")]
@@ -158,7 +158,7 @@
   (testing "history gets returned"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request "/run" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
@@ -169,7 +169,7 @@
           history (atom {:workspace []})
           buffer (worker/unbounded-buffer)
           queue (worker/build-channel buffer)
-          routes (build-routes nil job history :workspace queue)
+          routes (build-routes nil "job-id" job history :workspace queue)
           response (make-request :post "/run" routes {} "")]
       (is (= (:status response) 200))
       (is (= (count @buffer) 1))
@@ -177,6 +177,7 @@
       (let [history-item (-> @history :workspace first)
             build-item (-> @buffer first)]
         (is (= (:id history-item) (:id build-item)))
+        (is (= (:job-id build-item) "job-id"))
         (is (= (:config build-item)
                (-> @job :workspace)))
         (is (= (:type build-item) :workspace))
@@ -187,7 +188,7 @@
   (testing "get a history item by id"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace [{:id "foo" :blah true} {:id "bar" :blah false}]})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request "/run/foo" routes {:id "foo"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
@@ -196,7 +197,7 @@
   (testing "get an invalid history item by id"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          routes (build-routes nil job history :workspace nil)
+          routes (build-routes nil nil job history :workspace nil)
           response (make-request "/run/foo" routes {:id "foo"})]
       (is (= (:status response) 404)))))
 

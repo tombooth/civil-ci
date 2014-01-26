@@ -37,7 +37,7 @@
     (assoc history key (conj build-history item))))
 
 
-(defn build-routes [repo job history key build-channel]
+(defn build-routes [repo job-id job history key build-channel]
   (routes (POST "/steps" [:as request]
                 (if-let [content-type ((:headers request) "content-type")]
                   (cond (= content-type "text/plain")
@@ -66,7 +66,7 @@
 
           (POST "/run" []
                 (let [id (digest/sha1 (str (:name @job) (System/currentTimeMillis) (rand-int 1000)))
-                      build-item {:id id :type key :config (@job key)}
+                      build-item {:id id :job-id job-id :type key :config (@job key)}
                       history-item {:id id :status "queued"}]
                   (async/>!! build-channel build-item)
                   (swap! history add-history-item key history-item)
@@ -114,9 +114,9 @@
                          history (get-history jobs-history id)]
                         (POST "/run" [] {:status 307 :headers {"Location" (str "/jobs/" id "/build/run")}})
                         (context "/workspace" []
-                                 (build-routes repo job history :workspace build-channel))
+                                 (build-routes repo id job history :workspace build-channel))
                         (context "/build" []
-                                 (build-routes repo job history :build build-channel))))
+                                 (build-routes repo id job history :build build-channel))))
 
    (GET "/queue" [] {:status 200 :body (json/generate-string @build-buffer)})
    
