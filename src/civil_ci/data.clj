@@ -27,45 +27,49 @@
 
 
 
-(defn- get-config [file repo]
-  (if (fs/exists? file)
-    (let [config-ref (atom (json/parse-string (slurp file) true))]
-      (add-value-watcher config-ref file repo)
-      config-ref)))
+(defn- get-value [file repo]
+  (if (fs/file? file)
+    (let [file-ref (atom (json/parse-string (slurp file) true))]
+      (add-value-watcher file-ref file repo)
+      file-ref)))
+
+(defn- assoc-file [path filename repo]
+  (fn [hash id]
+    (if-let [config (get-value (io/file path id filename)
+                                repo)]
+      (assoc hash id config)
+      (do (println (str filename " missing for id: " id))
+          hash))))
+
+(defn- add-hash-entry [key value-ref path filename repo]
+  (let [file (io/file path key filename)
+        directory (io/file path key)]
+    (fs/mkdir directory)
+    (spit file (json/generate-string @value-ref))
+    (git/add-to repo (fs/absolute-path file))
+    (add-value-watcher value-ref file repo)))
+
+(defn- remove-hash-entry [key path repo]
+  (let [directory (io/file path key)]
+    (fs/delete-dir directory)
+    (git/remove-from repo (fs/absolute-path directory))))
+
+(defn- get-hash [path filename repo config-ref keys-keyword]
+  (let [hash-ref (atom (reduce (assoc-file path filename repo)
+                           {} (@config-ref keys-keyword)))]
+    (add-hash-watcher hash-ref path
+                      #(swap! config-ref assoc keys-keyword %)
+                      #(add-hash-entry %1 %2 path filename repo )
+                      #(remove-hash-entry % path repo))
+    hash-ref))
+
+
 
 (defn get-server-config [path repo]
-  (get-config (io/file path "server.json")
-              repo))
-
-(defn- assoc-job-config [path repo]
-  (fn [job-hash id]
-    (if-let [config (get-config (io/file path id "job.json")
-                                repo)]
-      (assoc job-hash id config)
-      (do (println (str "job.json missing for job id: " id))
-          job-hash))))
-
-(defn- add-job [path id config repo]
-  (let [config-file (io/file path id "job.json")]
-    (fs/mkdir (io/file path id))
-    (spit config-file
-          (json/generate-string @config))
-    (git/add-to repo (fs/absolute-path config-file))
-    (add-value-watcher config config-file repo)))
-
-(defn- remove-job [path id repo]
-  (let [job-dir (io/file path id)]
-    (fs/delete-dir job-dir)
-    (git/remove-from repo (str (fs/absolute-path job-dir)))))
-
+  (get-value (io/file path "server.json")
+             repo))
 
 (defn get-job-config [path repo server-config]
-  (let [job-config (atom (reduce (assoc-job-config path repo)
-                                 {} (:jobs @server-config)))]
-    (add-hash-watcher job-config path
-                      #(swap! server-config assoc :jobs %)
-                      #(add-job path %1 %2 repo )
-                      #(remove-job path % repo))
-    job-config))
+  (get-hash path "job.json" repo server-config :jobs))
 
 
