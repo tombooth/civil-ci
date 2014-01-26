@@ -98,7 +98,24 @@
         ;; when data gains a commit function I should use it
         ;; here to separate this into a change rather than an
         ;; incremented add
-        (is (added-in? repo "new-job/job.json"))))))
+        (is (added-in? repo "new-job/job.json")))))
+
+  (testing "if directory already exists it doesn't blow up"
+    (let [path (join test-dir "job-dir-already-exists")
+          repo (make-config-repo path "fixtures/job-dir-exists")
+          server-config (get-server-config path repo)
+          job-config (get-job-config path repo server-config)
+          new-job-config (atom {:name "New Job"})]
+      (swap! job-config assoc "some-id" new-job-config)
+      (fs/exists? (join path "some-id" "job.json"))))
+
+  (testing "if i don't care about git and pass no repo don't blow up"
+    (let [path (join test-dir "job-dir-already-exists")
+          server-config (get-server-config path nil)
+          job-config (get-job-config path nil server-config)
+          new-job-config (atom {:name "New Job"})]
+      (swap! job-config assoc "new-id" new-job-config)
+      (fs/exists? (join path "new-id" "job.json")))))
 
 
 

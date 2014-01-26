@@ -11,7 +11,7 @@
   (add-watch reference (fs/absolute-path file)
              (fn [path _ _ new-state]
                (spit path (json/generate-string new-state))
-               (git/add-to repo path))))
+               (if repo (git/add-to repo path)))))
 
 (defn- add-hash-watcher [reference path changed-fn add-fn remove-fn]
   (add-watch reference path
@@ -46,13 +46,13 @@
         directory (io/file path key)]
     (fs/mkdir directory)
     (spit file (json/generate-string @value-ref))
-    (git/add-to repo (fs/absolute-path file))
+    (if repo (git/add-to repo (fs/absolute-path file)))
     (add-value-watcher value-ref file repo)))
 
 (defn- remove-hash-entry [key path repo]
   (let [directory (io/file path key)]
     (fs/delete-dir directory)
-    (git/remove-from repo (fs/absolute-path directory))))
+    (if repo (git/remove-from repo (fs/absolute-path directory)))))
 
 (defn- get-hash [path filename repo config-ref keys-keyword]
   (let [hash-ref (atom (reduce (assoc-file path filename repo)
@@ -66,8 +66,7 @@
 
 
 (defn get-server-config [path repo]
-  (get-value (io/file path "server.json")
-             repo))
+  (get-value (io/file path "server.json") repo))
 
 (defn get-job-config [path repo server-config]
   (get-hash path "job.json" repo server-config :jobs))
