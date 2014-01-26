@@ -10,5 +10,6 @@
                  [cheshire "5.2.0"]
                  [http-kit "2.1.16"]
                  [compojure "1.1.6"]
-                 [digest "1.4.3"]]
+                 [digest "1.4.3"]
+                 [org.clojure/core.async "0.1.267.0-0d7780-alpha"]]
   :main civil-ci.core)

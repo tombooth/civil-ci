@@ -5,7 +5,8 @@
             [org.httpkit.server :as httpkit]
             [civil-ci.http :as http]
             [civil-ci.data :as data]
-            [civil-ci.git :as git]))
+            [civil-ci.git :as git]
+            [civil-ci.worker :as worker]))
 
 (def usage-string "Civil CI
 
@@ -37,10 +38,11 @@ Options:
              (if-let [server-config (data/get-server-config path repo)]
                (let [job-config (data/get-job-config path repo server-config)
                      job-history (data/get-job-history path server-config)
-                     build-queue (atom [])]
+                     build-buffer (worker/unbounded-buffer)
+                     build-channel (worker/build-channel build-buffer)]
                  (httpkit/run-server (http/bind-routes repo server-config
                                                        job-config job-history
-                                                       build-queue)
+                                                       build-channel build-buffer)
                                      {:port port})
                  (println "Started"))
                (println "Failed to load server.json"))

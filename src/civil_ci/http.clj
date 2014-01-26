@@ -1,6 +1,7 @@
 (ns civil-ci.http
   (:require [compojure.core :refer :all]
             [civil-ci.validation :refer :all]
+            [clojure.core.async :as async]
             [compojure.route :as route]
             [cheshire.core :as json]
             [civil-ci.data :as data]
@@ -36,7 +37,7 @@
     (assoc history key (conj build-history item))))
 
 
-(defn build-routes [repo job history key build-queue]
+(defn build-routes [repo job history key build-channel]
   (routes (POST "/steps" [:as request]
                 (if-let [content-type ((:headers request) "content-type")]
                   (cond (= content-type "text/plain")
@@ -65,15 +66,15 @@
 
           (POST "/run" []
                 (let [id (digest/sha1 (str (:name @job) (System/currentTimeMillis) (rand-int 1000)))
-                      queue-item {:id id :type key :config (@job key)}
+                      build-item {:id id :type key :config (@job key)}
                       history-item {:id id :status "queued"}]
-                  (swap! build-queue conj queue-item)
+                  (async/>!! build-channel build-item)
                   (swap! history add-history-item key history-item)
                   {:status 200 :body (json/generate-string history-item)}))))
 
 
 
-(defn bind-routes [repo server-config jobs-config jobs-history build-queue]
+(defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]
   (routes
    (GET "/jobs" []
         (let [jobs (map (fn [[id hash]] (assoc @hash :id id))
@@ -108,11 +109,11 @@
                          history (get-history jobs-history id)]
                         (POST "/run" [] {:status 307 :headers {"Location" (str "/jobs/" id "/build/run")}})
                         (context "/workspace" []
-                                 (build-routes repo job history :workspace build-queue))
+                                 (build-routes repo job history :workspace build-channel))
                         (context "/build" []
-                                 (build-routes repo job history :build build-queue))))
+                                 (build-routes repo job history :build build-channel))))
 
-   (GET "/queue" [] {:status 200 :body (json/generate-string @build-queue)})
+   (GET "/queue" [] {:status 200 :body (json/generate-string @build-buffer)})
    
    (route/not-found "Endpoint not found")))
 

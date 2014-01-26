@@ -1,6 +1,7 @@
 (ns civil-ci.http-test
   (:require [clojure.test :refer :all]
             [civil-ci.http :refer :all]
+            [civil-ci.worker :as worker]
             [cheshire.core :as json]))
 
 (defn make-request
@@ -20,26 +21,26 @@
 (deftest test-jobs
   (testing "return a job"
     (let [routes (bind-routes nil (atom {})
-                              (atom {"some-id" (atom {:name "Some Job"})}) nil nil)
+                              (atom {"some-id" (atom {:name "Some Job"})}) nil nil nil)
           response (make-request "/jobs/some-id" routes {:id "some-id"})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) {"name" "Some Job"}))))
 
   (testing "404s when no job"
-    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil)
+    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
           response (make-request "/jobs/foo" routes {:id "foo"})]
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"
     (let [routes (bind-routes nil (atom {}) (atom {"1" (atom {:name "a"})
-                                               "2" (atom {:name "b"})}) nil nil)
+                                               "2" (atom {:name "b"})}) nil nil nil)
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) [{"id" "1" "name" "a"}
                                                    {"id" "2" "name" "b"}]))))
 
   (testing "gets an empty array when no jobs"
-    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil)
+    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) []))))
@@ -48,7 +49,7 @@
     (let [server-config (atom {:jobs []})
           jobs-config (atom {})
           jobs-history (atom {})
-          routes (bind-routes nil server-config jobs-config jobs-history nil)
+          routes (bind-routes nil server-config jobs-config jobs-history nil nil)
           response (make-request :post "/jobs" routes {}
                                  "{\"name\":\"New Job\"}")]
       (is (= (:status response) 200))
@@ -66,7 +67,7 @@
   (testing "if the body is invalid, reject new job"
     (let [server-config (atom {:jobs []})
           jobs-config (atom {})
-          routes (bind-routes nil server-config jobs-config nil nil)
+          routes (bind-routes nil server-config jobs-config nil nil nil)
           response (make-request :post "/jobs" routes {}
                                  "{\"foo\":\"bar\"}")]
       (is (= (:status response) 400))))
@@ -75,7 +76,7 @@
     (let [server-config (atom {:jobs ["id"]})
           jobs-config (atom {"id" (atom {:workspace {:steps []}})})
           jobs-history (atom {})
-          routes (bind-routes nil server-config jobs-config jobs-history nil)
+          routes (bind-routes nil server-config jobs-config jobs-history nil nil)
           response (make-request "/jobs/id/workspace/steps" routes {})]
       (is (= (:status response) 200))
       (let [history @(@jobs-history "id")]
@@ -83,8 +84,9 @@
         (is (= (:build history) [])))))
 
   (testing "/queue should return the current build queue"
-    (let [build-queue (atom [])
-          routes (bind-routes nil nil nil nil build-queue)
+    (let [buffer (worker/unbounded-buffer)
+          build-channel (worker/build-channel buffer)
+          routes (bind-routes nil nil nil nil build-channel buffer)
           response (make-request "/queue" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
@@ -165,18 +167,19 @@
   (testing "when we run a build it causes history to be added and a build to be queued"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
-          queue (atom [])
+          buffer (worker/unbounded-buffer)
+          queue (worker/build-channel buffer)
           routes (build-routes nil job history :workspace queue)
           response (make-request :post "/run" routes {} "")]
       (is (= (:status response) 200))
-      (is (= (count @queue) 1))
+      (is (= (count @buffer) 1))
       (is (= (count (-> @history :workspace)) 1))
       (let [history-item (-> @history :workspace first)
-            queue-item (-> @queue first)]
-        (is (= (:id history-item) (:id queue-item)))
-        (is (= (:config queue-item)
+            build-item (-> @buffer first)]
+        (is (= (:id history-item) (:id build-item)))
+        (is (= (:config build-item)
                (-> @job :workspace)))
-        (is (= (:type queue-item) :workspace))
+        (is (= (:type build-item) :workspace))
         (is (= (:status history-item) "queued"))
         (is (= (json/parse-string (:body response) true)
                history-item))))))
