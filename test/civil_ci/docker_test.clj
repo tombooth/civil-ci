@@ -2,6 +2,7 @@
   (:require [clojure.test :refer :all]
             [civil-ci.docker :refer :all]
             [clojure.java.io :as io]
+            [cheshire.core :as json]
             [fs.core :as fs]))
 
 
@@ -16,5 +17,21 @@
         (is (= (slurp step-0) "foo"))
         (is (= (slurp step-1) "bar"))))))
 
+(def json-args-path (fs/absolute-path
+                     (io/resource "json-args")))
+
+(def test-dir (io/resource "fixtures"))
+(def test-dir-path (fs/absolute-path test-dir))
+
+(deftest test-build
+  (testing "without tag"
+    (let [output (build test-dir nil json-args-path)
+          parsed-output (json/parse-string output true)]
+      (is (= parsed-output ["build" test-dir-path]))))
+
+  (testing "with tag"
+    (let [output (build test-dir "bar" json-args-path)
+          parsed-output (json/parse-string output true)]
+      (is (= parsed-output ["build" "-t" "bar" test-dir-path])))))
 
 

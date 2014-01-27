@@ -35,11 +35,13 @@
 
 
 
-(defn build [dir tag]
-  (let [dir-path (fs/absolute-path dir)]
-    (conch/let-programs [docker "/usr/bin/docker"]
-                        (if tag
-                          (docker "build" "-t" tag dir-path)
-                          (docker "build" dir-path)))))
+(defn build
+  ([dir tag] (build dir tag "/usr/bin/docker"))
+  ([dir tag docker-path]
+     (let [dir-path (fs/absolute-path dir)]
+       (conch/let-programs [docker docker-path]
+                           (if tag
+                             (docker "build" "-t" tag dir-path)
+                             (docker "build" dir-path))))))
 
 

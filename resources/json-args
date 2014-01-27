@@ -1,0 +1,5 @@
+#!/bin/bash
+
+args=$(printf ",\"%s\"" ${@})
+args=${args:1}
+echo '[' $args ']'
