@@ -1,7 +1,9 @@
 (ns civil-ci.worker-test
   (:require [clojure.test :refer :all]
             [clojure.core.async :as async]
-            [civil-ci.worker :as worker]))
+            [civil-ci.worker :as worker]
+            [clojure.java.io :as io]
+            [fs.core :as fs]))
 
 (deftest test-unbounded-buffer
   (testing "returns good values when empty"
@@ -30,4 +32,26 @@
       (is (= (:workspace @history)
              [{:id "foo" :blah true} {:id "bar"}])))))
 
+(deftest test-worker-threads
+  (testing "spin up and spin down"
+    (let [build-chan (async/chan)
+          history (atom {:job {:workspace []}})
+          docker-path (fs/absolute-path (io/resource "json-args"))
+          worker-channels (worker/create-n 1 build-chan history
+                                           docker-path)]
+      (is (= (worker/stop worker-channels)
+             [0]))))
 
+  (testing "run one fake build"
+    (let [build-chan (async/chan)
+          history (atom {:job (atom {:workspace [{:id "foo"}]})})
+          docker-path (fs/absolute-path (io/resource "json-args"))
+          worker-channels (worker/create-n 1 build-chan history
+                                           docker-path)
+          build-item {:id "foo" :job-id :job :type :workspace
+                      :config {:steps ["#!/bin/bash\necho foo"]}}]
+      (async/>!! build-chan build-item)
+      (while (not (= (-> @history :job deref :workspace first :status) "finished"))
+        (Thread/sleep 100))
+      (is (= (worker/stop worker-channels)
+             [1])))))

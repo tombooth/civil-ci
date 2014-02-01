@@ -41,38 +41,51 @@
 
 
 
-(defn create [channel history]
-  (let [control-channel (async/chan)]
-    (async/thread (loop [[v ch] (async/alts!! [channel control-channel])]
-                    (if (and (= ch control-channel)
-                             (= v :exit))
-                      (println "Exiting worker thread")
-                      
-                      (let [id (:id v)
-                            job-id (:job-id v)
-                            type (:type v)
-                            job-history (@history job-id)]
+(defn- run-build [build-item history docker-path]
+  (let [id (:id build-item)
+        job-id (:job-id build-item)
+        type (:type build-item)
+        job-history (@history job-id)]
+    
+    (try
+      (println (str "Starting build [JOB:" job-id "][ID:" id "]"))
+      (swap! job-history set-history id type {:status "running"})
+    
+      (let [build-dir (docker/create-build-dir build-item)
+            build-log (docker/build build-dir nil docker-path)]
+        (println (str "Finished build [JOB:" job-id "][ID:" id "]"))
+        (swap! job-history set-history id type {:status "finished"
+                                                   :log build-log}))
+      (catch Exception e
+        (println (str "Thread blew up a bit: " (.getMessage e)))
+        (.printStackTrace e)
+        (swap! job-history set-history id type {:status "error"
+                                                :error (.getMessage e)})))))
 
-                        (println (str "Starting build [JOB:" job-id "][ID:" id "]"))
-                        (swap! job-history set-history id type {:status "running"})
-                        
-                        (try (let [build-dir (docker/create-build-dir v)
-                                   build-log (docker/build build-dir nil)]
-                               (println (str "Finished build [JOB:" job-id "][ID:" id "]"))
-                               (swap! job-history set-history id type {:status "finished"
-                                                                       :log build-log}))
-                             (catch Exception e
-                               (println (str "Thread blew up a bit: " (.getMessage e)))
-                               (.printStackTrace e)
-                               (swap! job-history set-history id type {:status "error"
-                                                                       :error (.getMessage e)})))
-                        
-                        (recur (async/alts!! [channel control-channel]))))))
-    control-channel))
+(defn- worker-thread [channel control-channel history docker-path]
+  (fn []
+    (let [build-count (atom 0)]
+      (loop [[v ch] (async/alts!! [channel control-channel])]
+        (if (and (= ch control-channel)
+                 (= v :exit))
+          @build-count
+          
+          (do (run-build v history docker-path)
+              (swap! build-count inc)
+              (recur (async/alts!! [channel control-channel]))))))))
 
-(defn create-n [num build-channel history]
-  (doall (map #(create % history) (repeat num build-channel))))
+(defn create [channel history docker-path]
+  (let [control-channel (async/chan)
+        thread-channel (async/thread-call (worker-thread channel control-channel
+                                                         history docker-path))]
+    [thread-channel control-channel]))
 
-(defn stop [control-channels]
-  (doall (map #(async/>!! % :exit) control-channels)))
+(defn create-n [num build-channel history docker-path]
+  (doall (map #(create % history docker-path) (repeat num build-channel))))
+
+(defn stop [worker-channels]
+  (doall (map (fn [[thread-channel control-channel]]
+                (async/>!! control-channel :exit)
+                (async/<!! thread-channel))
+              worker-channels)))
 
