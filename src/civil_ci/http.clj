@@ -1,7 +1,7 @@
 (ns civil-ci.http
   (:require [compojure.core :refer :all]
             [clojure.data :refer :all]
-            [org.httpkit.server :refer [with-channel send! on-close]]
+            [org.httpkit.server :refer [with-channel send! on-close close websocket?]]
             [clojure.set :refer [difference]]
             [civil-ci.validation :refer :all]
             [clojure.core.async :as async]
@@ -96,11 +96,15 @@
   ([state-atom munge-fn]
      (fn [request]
        (with-channel request channel
-         (let [key (diff-watcher state-atom munge-fn
-                                 (fn [changed]
-                                   (send! channel (json/generate-string changed))))]
-           (on-close channel (fn [_] (remove-watch state-atom key)))
-           (send! channel (json/generate-string {:initial (munge-fn @state-atom)})))))))
+         (if (websocket? channel)
+           (let [key (diff-watcher state-atom munge-fn
+                                   (fn [changed]
+                                     (send! channel (json/generate-string changed))))]
+             (on-close channel (fn [_] (remove-watch state-atom key)))
+             (send! channel (json/generate-string {:initial (munge-fn @state-atom)})))
+           (send! channel {:status 200
+                           :body (json/generate-string (munge-fn @state-atom))}
+                  true))))))
 
 
 (defn build-routes [repo job-id job history key build-channel]
@@ -148,9 +152,7 @@
 (defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]
   (routes
    (GET "/jobs" []
-        {:status 200 :body (json/generate-string (jobs-from-config @jobs-config))})
-
-   (GET "/jobs/stream" [] (state-stream jobs-config jobs-from-config))
+        (state-stream jobs-config jobs-from-config))
    
    (POST "/jobs" [id :as request]
          (let [body (slurp (:body request))

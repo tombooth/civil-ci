@@ -2,13 +2,36 @@
   (:require [clojure.test :refer :all]
             [civil-ci.http :refer :all]
             [civil-ci.worker :as worker]
+            [org.httpkit.server :as httpkit]
             [cheshire.core :as json]))
+
+
+(deftype FakeChannel [is-websocket? open-atom on-close-atom sent-atom]
+  
+  httpkit/Channel
+  (open? [ch] @open-atom)
+  (close [ch]
+    (reset! open-atom false)
+    (if-let [on-close-fn @on-close-atom]
+      (on-close-fn :normal)))
+  (websocket? [ch] is-websocket?)
+  (send! [ch data] (httpkit/send! ch data false))
+  (send! [ch data close-after-send?]
+    (swap! sent-atom conj data)
+    (if close-after-send? (httpkit/close ch)))
+  (on-receive [ch callback] nil)
+  (on-close [ch callback]
+    (reset! on-close-atom callback))
+  
+  clojure.lang.IDeref
+  (deref [ch] @sent-atom))
+
 
 (defn make-request
   ([resource web-app]
-     (web-app {:request-method :get :uri resource}))
+     (make-request :get resource web-app {} {} ""))
   ([resource web-app params]
-     (web-app {:request-method :get :uri resource :params params}))
+     (make-request :get resource web-app {} params ""))
   ([method resource web-app params body]
      (make-request method resource web-app {} params body))
   ([method resource web-app headers params body]
@@ -16,6 +39,13 @@
                :headers headers :params params
                :body (java.io.StringReader. body)})))
 
+(defn make-async-request [resource web-app params websocket?]
+  (let [channel (FakeChannel. websocket? (atom true) (atom nil) (atom []))
+        request {:request-method :get :uri resource :params params
+                 :headers {"sec-websocket-key" "foo"} :websocket? websocket?
+                 :async-channel channel}]
+    (web-app request)
+    channel))
 
 
 (deftest test-jobs
@@ -34,14 +64,16 @@
   (testing "gets a list of jobs"
     (let [routes (bind-routes nil (atom {}) (atom {"1" (atom {:id "1" :name "a"})
                                                "2" (atom {:id "2" :name "b"})}) nil nil nil)
-          response (make-request "/jobs" routes {})]
+          channel (make-async-request "/jobs" routes {} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) [{"id" "1" "name" "a"}
                                                    {"id" "2" "name" "b"}]))))
 
   (testing "gets an empty array when no jobs"
     (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
-          response (make-request "/jobs" routes {})]
+          channel (make-async-request "/jobs" routes {} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) []))))
 
