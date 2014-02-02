@@ -91,6 +91,17 @@
                                         :removed (if (empty? removed) nil removed)}))))
        key)))
 
+(defn state-stream
+  ([state-atom] (state-stream state-atom identity))
+  ([state-atom munge-fn]
+     (fn [request]
+       (with-channel request channel
+         (let [key (diff-watcher state-atom munge-fn
+                                 (fn [changed]
+                                   (send! channel (json/generate-string changed))))]
+           (on-close channel (fn [_] (remove-watch state-atom key)))
+           (send! channel (json/generate-string {:initial (munge-fn @state-atom)})))))))
+
 
 (defn build-routes [repo job-id job history key build-channel]
   (routes (POST "/steps" [:as request]
@@ -134,19 +145,12 @@
                  {:status 404 :body "Invalid run id"}))))
 
 
-
 (defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]
   (routes
    (GET "/jobs" []
         {:status 200 :body (json/generate-string (jobs-from-config @jobs-config))})
 
-   (GET "/jobs/stream" []
-        (fn [request]
-          (with-channel request channel
-            (let [key (diff-watcher jobs-config jobs-from-config
-                                    (fn [changed]
-                                      (send! channel (json/generate-string changed))))]
-              (on-close channel (fn [_] (remove-watch jobs-config key)))))))
+   (GET "/jobs/stream" [] (state-stream jobs-config jobs-from-config))
    
    (POST "/jobs" [id :as request]
          (let [body (slurp (:body request))
