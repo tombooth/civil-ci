@@ -17,11 +17,6 @@
         new-build (assoc build :steps new-steps)]
     (assoc job key new-build)))
 
-(defn- commit-step [repo job key step]
-  (swap! job add-step key step)
-  (git/commit repo "Added a new build step")
-  {:status 200 :body (json/generate-string step)})
-
 (defn- add-history [jobs-history id]
   (let [history-atom (atom {:workspace [] :build []})]
     (swap! jobs-history assoc id history-atom)
@@ -36,25 +31,33 @@
   (let [build-history (history key)]
     (assoc history key (conj build-history item))))
 
+(defn- extract-step [request]
+  (if-let [content-type ((:headers request) "content-type")]
+    (cond (= content-type "text/plain")
+          (let [script (slurp (:body request))]
+            {:script script})
+          
+          (= content-type "application/json")
+          (let [json (json/parse-string (slurp (:body request)) true)]
+            (if-let [step (validate json (required :script))] step :invalid-step))
+          
+          :else
+          :invalid-content-type)
+    :no-conent-type))
+
+
+(def step-error {:no-content-type "Need to provide a content type"
+                 :invalid-content-type "Only expects application/json or text/plain"
+                 :invalid-step "Step provided was invalid"})
 
 (defn build-routes [repo job-id job history key build-channel]
   (routes (POST "/steps" [:as request]
-                (if-let [content-type ((:headers request) "content-type")]
-                  (cond (= content-type "text/plain")
-                        (let [script (slurp (:body request))
-                              step {:script script}]
-                          (commit-step repo job key step))
-                        
-                        (= content-type "application/json")
-                        (let [json (json/parse-string (slurp (:body request)) true)]
-                          (if-let [step (validate json
-                                                  (required :script))]
-                            (commit-step repo job key step)
-                            {:status 400 :body "Invalid step"}))
-                        
-                        :else
-                        {:status 400 :body "Invalid content-type"})
-                  {:status 400 :body "content-type header required"}))
+                (let [step (extract-step request)]
+                  (if (keyword? step)
+                    {:status 400 :body (step-error step)}
+                    (do (swap! job add-step key step)
+                        (git/commit repo "Added a new build step")
+                        {:status 200 :body (json/generate-string step)}))))
 
           (GET "/steps" []
                {:status 200
