@@ -155,6 +155,29 @@
       (is (= (-> @job :workspace :steps)
              [{:script "step1"} {:script "step2"}]))))
 
+  (testing "i can update a particular step by ordinal"
+    (let [job (atom {:name "Job" :workspace {:steps [{:script "foo"}
+                                                     {:script "bar"}]}})
+          history (atom {:workspace []})
+          routes (build-routes nil nil job history :workspace nil)
+          response (make-request :put "/steps/1" routes {"content-type" "application/json"}
+                                 {:id "id" :ordinal "1"} "{\"script\":\"bar-changed\"}")]
+      (is (= (:status response) 200))
+      (is (= (-> @job :workspace :steps)
+             [{:script "foo"} {:script "bar-changed"}]))
+      (is (= (json/parse-string (:body response) true)
+             {:script "bar-changed"}))))
+
+  (testing "trying to update a step with invalid ordinal results in 400"
+    (let [job (atom {:name "Job" :workspace {:steps [{:script "foo"}]}})
+          history (atom {:workspace []})
+          routes (build-routes nil nil job history :workspace nil)
+          response (make-request :put "/steps/1" routes {"content-type" "application/json"}
+                                 {:id "id" :ordinal "1"} "{\"script\":\"bar-changed\"}")]
+      (is (= (:status response) 400))
+      (is (= (-> @job :workspace :steps)
+             [{:script "foo"}]))))
+
   (testing "history gets returned"
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})

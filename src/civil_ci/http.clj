@@ -17,6 +17,13 @@
         new-build (assoc build :steps new-steps)]
     (assoc job key new-build)))
 
+(defn- update-step [job key step ordinal]
+  (let [build (job key)
+        head (take ordinal (:steps build))
+        tail (drop (+ ordinal 1) (:steps build))
+        new-build (assoc build :steps (concat head [step] tail))]
+    (assoc job key new-build)))
+
 (defn- add-history [jobs-history id]
   (let [history-atom (atom {:workspace [] :build []})]
     (swap! jobs-history assoc id history-atom)
@@ -45,6 +52,14 @@
           :invalid-content-type)
     :no-conent-type))
 
+(defn- to-int [string] (try (Integer. string) (catch NumberFormatException e nil)))
+
+(defn- valid-ordinal? [ordinal job key]
+  (if-let [ordinal-int (to-int ordinal)]
+    (let [steps (:steps (@job key))]
+      (and (< ordinal-int (count steps))
+           (>= ordinal-int 0)))))
+
 
 (def step-error {:no-content-type "Need to provide a content type"
                  :invalid-content-type "Only expects application/json or text/plain"
@@ -62,6 +77,17 @@
           (GET "/steps" []
                {:status 200
                 :body (json/generate-string (:steps (@job key)))})
+
+          (PUT "/steps/:ordinal" [ordinal :as request]
+               (if (valid-ordinal? ordinal job key)
+                 (let [step (extract-step request)
+                       ordinal-int (to-int ordinal)]
+                  (if (keyword? step)
+                    {:status 400 :body (step-error step)}
+                    (do (swap! job update-step key step ordinal-int)
+                        (git/commit repo (str "Updated build step " ordinal))
+                        {:status 200 :body (json/generate-string step)})))
+                 {:status 400 :body "Invalid ordinal"}))
 
           (GET "/run" []
                {:status 200
