@@ -57,20 +57,30 @@
         (is (= (-> sent second :added count) 1))
         (is (= (-> sent second :added first)
                @new-job))
-        (is (= (-> sent second :removed) nil))))))
+        (is (= (-> sent second :removed) nil)))))
+
+  (testing "stream is closed if invalid"
+    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
+          channel (make-async-request "/jobs/1" routes {} true)
+          sent (map #(json/parse-string % true) @channel)]
+      (is (= (count sent) 1))
+      (is (not (httpkit/open? channel)))
+      (is (string? (-> sent first :error))))))
 
 
 (deftest test-jobs
   (testing "return a job"
     (let [routes (bind-routes nil (atom {})
                               (atom {"some-id" (atom {:name "Some Job"})}) nil nil nil)
-          response (make-request "/jobs/some-id" routes {:id "some-id"})]
+          channel (make-async-request "/jobs/some-id" routes {:id "some-id"} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) {"name" "Some Job"}))))
 
   (testing "404s when no job"
     (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
-          response (make-request "/jobs/foo" routes {:id "foo"})]
+          channel (make-async-request "/jobs/foo" routes {:id "foo"} false)
+          response (first @channel)]
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"

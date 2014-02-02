@@ -96,15 +96,19 @@
   ([state-atom munge-fn]
      (fn [request]
        (with-channel request channel
-         (if (websocket? channel)
-           (let [key (diff-watcher state-atom munge-fn
-                                   (fn [changed]
-                                     (send! channel (json/generate-string changed))))]
-             (on-close channel (fn [_] (remove-watch state-atom key)))
-             (send! channel (json/generate-string {:initial (munge-fn @state-atom)})))
-           (send! channel {:status 200
-                           :body (json/generate-string (munge-fn @state-atom))}
-                  true))))))
+         (if (not (nil? state-atom))
+           (let [initial-value (munge-fn @state-atom)]
+             (if (websocket? channel)
+               (let [key (diff-watcher state-atom munge-fn
+                                       (fn [changed]
+                                         (send! channel (json/generate-string changed))))]
+                 (on-close channel (fn [_] (remove-watch state-atom key)))
+                 (send! channel (json/generate-string {:initial initial-value})))
+               (send! channel {:status 200
+                               :body (json/generate-string initial-value)}
+                      true)))
+           (send! channel {:status 404
+                           :body (json/generate-string {:error "Resource not found"})} true))))))
 
 
 (defn build-routes [repo job-id job history key build-channel]
@@ -174,9 +178,7 @@
              {:status 400 :body "Invalid job"})))
    
    (GET "/jobs/:id" [id]
-        (if-let [job (@jobs-config id)]
-          {:status 200 :body (json/generate-string @job)}
-          {:status 404 :body "Job not found"}))
+        (state-stream (@jobs-config id)))
 
    (context "/jobs/:id" [id]
             (let-routes [job (@jobs-config id)

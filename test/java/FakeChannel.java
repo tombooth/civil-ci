@@ -10,6 +10,7 @@ import clojure.lang.PersistentVector;
 import org.httpkit.server.AsyncChannel;
 import org.httpkit.server.HttpRequest;
 
+@SuppressWarnings({"rawtypes", "unchecked"})
 public class FakeChannel extends AsyncChannel implements IDeref {
 
     public boolean isWebsocket;
@@ -20,6 +21,7 @@ public class FakeChannel extends AsyncChannel implements IDeref {
 
     static Keyword K_NORMAL = Keyword.intern("normal");
     static Keyword K_UNKNOWN = Keyword.intern("unknown");
+    static Keyword BODY = Keyword.intern("body");
 
     public FakeChannel(boolean isWebsocket) {
         super(null, null);
@@ -37,8 +39,17 @@ public class FakeChannel extends AsyncChannel implements IDeref {
     }
 
     public boolean send(Object data, boolean closeAfterSend) {
-        sent.add(data);
+        if (isWebsocket && data instanceof Map) { 
+            Object tmp = ((Map<Keyword, Object>) data).get(BODY);
+            if (tmp != null) {
+                sent.add(tmp);
+            }
+        } else {
+            sent.add(data);
+        }
+
         if (closeAfterSend) this.close();
+
         return true;
     }
 
