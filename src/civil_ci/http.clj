@@ -1,5 +1,8 @@
 (ns civil-ci.http
   (:require [compojure.core :refer :all]
+            [clojure.data :refer :all]
+            [org.httpkit.server :refer [with-channel send! on-close]]
+            [clojure.set :refer [difference]]
             [civil-ci.validation :refer :all]
             [clojure.core.async :as async]
             [compojure.route :as route]
@@ -60,10 +63,34 @@
       (and (< ordinal-int (count steps))
            (>= ordinal-int 0)))))
 
+(defn- jobs-from-config [jobs-config] (map (fn [[_ hash]] @hash) jobs-config))
+
 
 (def step-error {:no-content-type "Need to provide a content type"
                  :invalid-content-type "Only expects application/json or text/plain"
                  :invalid-step "Step provided was invalid"})
+
+
+(defn diff-watcher
+  ([atom out-fn] (diff-watcher atom identity out-fn))
+  ([atom munge-fn out-fn]
+     (let [key (str (System/currentTimeMillis) (rand-int 10000))]
+       (add-watch atom key (fn [_ _ old new]
+                             (let [munged-old (munge-fn old)
+                                   munged-new (munge-fn new)
+                                   [removed added _] (if (or (vector? munged-new)
+                                                             (list? munged-new)
+                                                             (seq? munged-new))
+                                                       (let [new-set (set munged-new)
+                                                             old-set (set munged-old)]
+                                                         [(vec (difference old-set new-set))
+                                                          (vec (difference new-set old-set))
+                                                          nil])
+                                                       (diff munged-old munged-new))]
+                               (out-fn {:added (if (empty? added) nil added)
+                                        :removed (if (empty? removed) nil removed)}))))
+       key)))
+
 
 (defn build-routes [repo job-id job history key build-channel]
   (routes (POST "/steps" [:as request]
@@ -111,8 +138,15 @@
 (defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]
   (routes
    (GET "/jobs" []
-        (let [jobs (map (fn [[_ hash]] @hash) @jobs-config)]
-          {:status 200 :body (json/generate-string jobs)}))
+        {:status 200 :body (json/generate-string (jobs-from-config @jobs-config))})
+
+   (GET "/jobs/stream" []
+        (fn [request]
+          (with-channel request channel
+            (let [key (diff-watcher jobs-config jobs-from-config
+                                    (fn [changed]
+                                      (send! channel (json/generate-string changed))))]
+              (on-close channel (fn [_] (remove-watch jobs-config key)))))))
    
    (POST "/jobs" [id :as request]
          (let [body (slurp (:body request))

@@ -225,3 +225,35 @@
       (is (= (:status response) 404)))))
 
 
+(deftest test-diff-watcher
+  (testing "simple test of diff-watcher"
+    (let [watched-atom (atom ["foo"])
+          diff-atom (atom [])
+          key (diff-watcher watched-atom (partial swap! diff-atom conj))]
+      (reset! watched-atom ["bar"])
+      (is (= @diff-atom [{:added ["bar"] :removed ["foo"]}]))
+      (remove-watch watched-atom key)
+      (reset! watched-atom ["foo"])
+      (is (= (count @diff-atom) 1))))
+
+  (testing "with some munging"
+    (let [watched-atom (atom {"foo" {:a "b"}})
+          diff-atom (atom [])
+          key (diff-watcher watched-atom
+                            (fn [m] (map (fn [[_ val]] val) m))
+                            (partial swap! diff-atom conj))]
+      (reset! watched-atom {})
+      (is (= @diff-atom [{:added nil :removed [{:a "b"}]}]))
+      (remove-watch watched-atom key)))
+
+  (testing "munging and adding"
+    (let [watched-atom (atom {"foo" {:a "b"}})
+          diff-atom (atom [])
+          key (diff-watcher watched-atom
+                            (fn [m] (map (fn [[_ val]] val) m))
+                            (partial swap! diff-atom conj))]
+      (swap! watched-atom assoc "bar" {:b "c"})
+      (is (= @diff-atom [{:added [{:b "c"}] :removed nil}]))
+      (remove-watch watched-atom key))))
+
+
