@@ -32,8 +32,8 @@
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"
-    (let [routes (bind-routes nil (atom {}) (atom {"1" (atom {:name "a"})
-                                               "2" (atom {:name "b"})}) nil nil nil)
+    (let [routes (bind-routes nil (atom {}) (atom {"1" (atom {:id "1" :name "a"})
+                                               "2" (atom {:id "2" :name "b"})}) nil nil nil)
           response (make-request "/jobs" routes {})]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) [{"id" "1" "name" "a"}

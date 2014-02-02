@@ -111,8 +111,7 @@
 (defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]
   (routes
    (GET "/jobs" []
-        (let [jobs (map (fn [[id hash]] (assoc @hash :id id))
-                        @jobs-config)]
+        (let [jobs (map (fn [[_ hash]] @hash) @jobs-config)]
           {:status 200 :body (json/generate-string jobs)}))
    
    (POST "/jobs" [id :as request]
@@ -126,11 +125,12 @@
                                             (optional :steps))
                                   (optional :build
                                             (optional :steps)))]
-             (let [id (digest/sha-1 (str body (System/currentTimeMillis)))]
-               (swap! jobs-config assoc id (atom job))
+             (let [id (digest/sha-1 (str body (System/currentTimeMillis)))
+                   job-with-id (assoc job :id id)]
+               (swap! jobs-config assoc id (atom job-with-id))
                (add-history jobs-history id)
                (git/commit repo (str "A new job with id '" id "' has been added"))
-               {:status 200 :body (json/generate-string (assoc job :id id))})
+               {:status 200 :body (json/generate-string job-with-id)})
              {:status 400 :body "Invalid job"})))
    
    (GET "/jobs/:id" [id]
