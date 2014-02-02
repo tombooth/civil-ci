@@ -13,4 +13,5 @@
                  [compojure "1.1.6"]
                  [digest "1.4.3"]
                  [org.clojure/core.async "0.1.267.0-0d7780-alpha"]]
+  :java-source-paths ["test/java"]
   :main civil-ci.core)

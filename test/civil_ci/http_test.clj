@@ -3,28 +3,22 @@
             [civil-ci.http :refer :all]
             [civil-ci.worker :as worker]
             [org.httpkit.server :as httpkit]
-            [cheshire.core :as json]))
+            [cheshire.core :as json])
+  (:import FakeChannel))
 
 
-(deftype FakeChannel [is-websocket? open-atom on-close-atom sent-atom]
-  
+(extend-type FakeChannel
   httpkit/Channel
-  (open? [ch] @open-atom)
-  (close [ch]
-    (reset! open-atom false)
-    (if-let [on-close-fn @on-close-atom]
-      (on-close-fn :normal)))
-  (websocket? [ch] is-websocket?)
-  (send! [ch data] (httpkit/send! ch data false))
-  (send! [ch data close-after-send?]
-    (swap! sent-atom conj data)
-    (if close-after-send? (httpkit/close ch)))
+  (open? [ch] (.isOpen ch))
+  (close [ch] (.close ch))
+  (websocket? [ch] (.isWebsocket ch))
+  (send!
+    ([ch data] (httpkit/send! ch data false))
+    ([ch data close-after-send]
+       (.send ch data (boolean close-after-send))))
   (on-receive [ch callback] nil)
   (on-close [ch callback]
-    (reset! on-close-atom callback))
-  
-  clojure.lang.IDeref
-  (deref [ch] @sent-atom))
+    (.onCloseHandler ch callback)))
 
 
 (defn make-request
@@ -40,12 +34,30 @@
                :body (java.io.StringReader. body)})))
 
 (defn make-async-request [resource web-app params websocket?]
-  (let [channel (FakeChannel. websocket? (atom true) (atom nil) (atom []))
+  (let [channel (FakeChannel. (boolean websocket?))
         request {:request-method :get :uri resource :params params
                  :headers {"sec-websocket-key" "foo"} :websocket? websocket?
                  :async-channel channel}]
     (web-app request)
     channel))
+
+
+(deftest test-stream
+  (testing "jobs stream properly"
+    (let [jobs-config (atom {"1" (atom {:id "1" :name "a"})})
+          routes (bind-routes nil (atom {}) jobs-config nil nil nil)
+          channel (make-async-request "/jobs" routes {} true)
+          new-job (atom {:id "2" :name "b"})]
+      (swap! jobs-config assoc "2" new-job)
+      (httpkit/close channel)
+      (let [sent (map #(json/parse-string % true) @channel)]
+        (is (= (count sent) 2))
+        (is (= (-> sent first :initial)
+               [@(@jobs-config "1")]))
+        (is (= (-> sent second :added count) 1))
+        (is (= (-> sent second :added first)
+               @new-job))
+        (is (= (-> sent second :removed) nil))))))
 
 
 (deftest test-jobs
