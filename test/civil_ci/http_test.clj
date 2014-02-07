@@ -131,7 +131,8 @@
           jobs-config (atom {"id" (atom {:workspace {:steps []}})})
           jobs-history (atom {})
           routes (bind-routes nil server-config jobs-config jobs-history nil nil)
-          response (make-request "/jobs/id/workspace/steps" routes {})]
+          channel (make-async-request "/jobs/id/workspace/steps" routes {} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (let [history @(@jobs-history "id")]
         (is (= (:workspace history) []))
@@ -193,7 +194,8 @@
                                                      {:script "bar"}]}})
           history (atom {:workspace []})
           routes (build-routes nil nil job history :workspace nil)
-          response (make-request "/steps" routes {:id "id"})]
+          channel (make-async-request "/steps" routes {:id "id"} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
              [{:script "foo"} {:script "bar"}]))))
@@ -308,6 +310,15 @@
                             (partial swap! diff-atom conj))]
       (swap! watched-atom assoc "bar" {:b "c"})
       (is (= @diff-atom [{:added [{:b "c"}] :removed nil}]))
+      (remove-watch watched-atom key)))
+
+  (testing "when munged doesn't change"
+    (let [watched-atom (atom {:foo "bar" :a "b"})
+          diff-atom (atom [])
+          key (diff-watcher watched-atom :foo
+                            (partial swap! diff-atom conj))]
+      (swap! watched-atom assoc :a "c")
+      (is (empty? @diff-atom))
       (remove-watch watched-atom key))))
 
 

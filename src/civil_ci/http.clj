@@ -1,6 +1,5 @@
 (ns civil-ci.http
   (:require [compojure.core :refer :all]
-            [clojure.data :refer :all]
             [org.httpkit.server :refer [with-channel send! on-close close websocket?]]
             [clojure.set :refer [difference]]
             [civil-ci.validation :refer :all]
@@ -9,6 +8,7 @@
             [cheshire.core :as json]
             [civil-ci.data :as data]
             [civil-ci.git :as git]
+            [clojure.data]
             [digest]))
 
 
@@ -71,24 +71,26 @@
                  :invalid-step "Step provided was invalid"})
 
 
+(defn- diff [old new]
+  (if (or (vector? new) (list? new) (seq? new))
+    (let [new-set (set new)
+          old-set (set old)]
+      [(vec (difference old-set new-set))
+       (vec (difference new-set old-set))
+       nil])
+    (clojure.data/diff old new)))
+
 (defn diff-watcher
   ([atom out-fn] (diff-watcher atom identity out-fn))
   ([atom munge-fn out-fn]
      (let [key (str (System/currentTimeMillis) (rand-int 10000))]
        (add-watch atom key (fn [_ _ old new]
                              (let [munged-old (munge-fn old)
-                                   munged-new (munge-fn new)
-                                   [removed added _] (if (or (vector? munged-new)
-                                                             (list? munged-new)
-                                                             (seq? munged-new))
-                                                       (let [new-set (set munged-new)
-                                                             old-set (set munged-old)]
-                                                         [(vec (difference old-set new-set))
-                                                          (vec (difference new-set old-set))
-                                                          nil])
-                                                       (diff munged-old munged-new))]
-                               (out-fn {:added (if (empty? added) nil added)
-                                        :removed (if (empty? removed) nil removed)}))))
+                                   munged-new (munge-fn new)]
+                               (if (not (= munged-old munged-new))
+                                 (let [[removed added _] (diff munged-old munged-new)]
+                                   (out-fn {:added (if (empty? added) nil added)
+                                            :removed (if (empty? removed) nil removed)}))))))
        key)))
 
 (defn state-stream
@@ -121,8 +123,7 @@
                         {:status 200 :body (json/generate-string step)}))))
 
           (GET "/steps" []
-               {:status 200
-                :body (json/generate-string (:steps (@job key)))})
+               (state-stream job #(:steps (% key))))
 
           (PUT "/steps/:ordinal" [ordinal :as request]
                (if (valid-ordinal? ordinal job key)
