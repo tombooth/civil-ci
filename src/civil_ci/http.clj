@@ -71,6 +71,7 @@
                  :invalid-step "Step provided was invalid"})
 
 
+
 (defn- diff [old new]
   (if (or (vector? new) (list? new) (seq? new))
     (let [new-set (set new)
@@ -93,13 +94,18 @@
                                             :removed (if (empty? removed) nil removed)}))))))
        key)))
 
+
+
+(def not-found-response {:status 404
+                         :body (json/generate-string {:error "Resource not found"})})
+
 (defn state-stream
   ([state-atom] (state-stream state-atom identity))
   ([state-atom munge-fn]
      (fn [request]
        (with-channel request channel
          (if (not (nil? state-atom))
-           (let [initial-value (munge-fn @state-atom)]
+           (if-let [initial-value (munge-fn @state-atom)]
              (if (websocket? channel)
                (let [key (diff-watcher state-atom munge-fn
                                        (fn [changed]
@@ -108,9 +114,10 @@
                  (send! channel (json/generate-string {:initial initial-value})))
                (send! channel {:status 200
                                :body (json/generate-string initial-value)}
-                      true)))
-           (send! channel {:status 404
-                           :body (json/generate-string {:error "Resource not found"})} true))))))
+                      true))
+             (send! channel not-found-response true))
+           (send! channel not-found-response true))))))
+
 
 
 (defn build-routes [repo job-id job history key build-channel]
@@ -148,9 +155,9 @@
                   {:status 200 :body (json/generate-string history-item)}))
 
           (GET "/run/:id" [id]
-               (if-let [history-item (first (filter #(= id (:id %)) (@history key)))]
-                 {:status 200 :body (json/generate-string history-item)}
-                 {:status 404 :body "Invalid run id"}))))
+               (state-stream history (fn [history-val]
+                                       (first (filter #(= id (:id %))
+                                                      (history-val key))))))))
 
 
 (defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]

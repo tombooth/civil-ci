@@ -65,7 +65,19 @@
           sent (map #(json/parse-string % true) @channel)]
       (is (= (count sent) 1))
       (is (not (httpkit/open? channel)))
+      (is (string? (-> sent first :error)))))
+
+  (testing "stream is closed if munge doesn't yeild a result"
+    (let [routes (bind-routes nil (atom {})
+                              (atom {"1" (atom {})}) (atom {"1" (atom {:workspace []})})
+                              nil nil)
+          channel (make-async-request "/jobs/1/workspace/run/foo" routes {} true)
+          sent (map #(json/parse-string % true) @channel)]
+      (is (= (count sent) 1))
+      (is (not (httpkit/open? channel)))
       (is (string? (-> sent first :error))))))
+
+
 
 
 (deftest test-jobs
@@ -269,7 +281,8 @@
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace [{:id "foo" :blah true} {:id "bar" :blah false}]})
           routes (build-routes nil nil job history :workspace nil)
-          response (make-request "/run/foo" routes {:id "foo"})]
+          channel (make-async-request "/run/foo" routes {:id "foo"} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
              {:id "foo" :blah true}))))
@@ -278,7 +291,8 @@
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
           routes (build-routes nil nil job history :workspace nil)
-          response (make-request "/run/foo" routes {:id "foo"})]
+          channel (make-async-request "/run/foo" routes {:id "foo"} false)
+          response (first @channel)]
       (is (= (:status response) 404)))))
 
 
