@@ -238,7 +238,8 @@
     (let [job (atom {:name "Job" :workspace {:steps []}})
           history (atom {:workspace []})
           routes (build-routes nil nil job history :workspace nil)
-          response (make-request "/run" routes {})]
+          channel (make-async-request "/run" routes {} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
              []))))

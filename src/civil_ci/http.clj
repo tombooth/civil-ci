@@ -137,8 +137,7 @@
                  {:status 400 :body "Invalid ordinal"}))
 
           (GET "/run" []
-               {:status 200
-                :body (json/generate-string (@history key))})
+               (state-stream history #(% key)))
 
           (POST "/run" []
                 (let [id (digest/sha1 (str (:name @job) (System/currentTimeMillis) (rand-int 1000)))
