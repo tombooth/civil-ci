@@ -46,7 +46,7 @@
 (deftest test-stream
   (testing "jobs stream properly"
     (let [jobs-config (atom {"1" (atom {:id "1" :name "a"})})
-          routes (bind-routes nil (atom {}) jobs-config nil nil nil)
+          routes (bind-routes nil (atom {}) jobs-config nil nil nil nil)
           channel (make-async-request "/jobs" routes {} true)
           new-job (atom {:id "2" :name "b"})]
       (swap! jobs-config assoc "2" new-job)
@@ -61,7 +61,7 @@
         (is (= (-> sent second :removed) nil)))))
 
   (testing "stream is closed if invalid"
-    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
+    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil nil)
           channel (make-async-request "/jobs/1" routes {} true)
           sent (map #(json/parse-string % true) @channel)]
       (is (= (count sent) 1))
@@ -71,7 +71,7 @@
   (testing "stream is closed if munge doesn't yeild a result"
     (let [routes (bind-routes nil (atom {})
                               (atom {"1" (atom {})}) (atom {"1" (atom {:workspace []})})
-                              nil nil)
+                              nil nil nil)
           channel (make-async-request "/jobs/1/workspace/run/foo" routes {} true)
           sent (map #(json/parse-string % true) @channel)]
       (is (= (count sent) 1))
@@ -81,7 +81,7 @@
   (testing "build queue works as expected"
     (let [build-buffer (worker/unbounded-buffer)
           build-channel (worker/build-channel build-buffer)
-          routes (bind-routes nil nil nil nil build-channel build-buffer)
+          routes (bind-routes nil nil nil nil build-channel build-buffer nil)
           channel (make-async-request "/queue" routes {} true)]
       (async/>!! build-channel "foo")
       (async/>!! build-channel "foo")
@@ -100,21 +100,21 @@
 (deftest test-jobs
   (testing "return a job"
     (let [routes (bind-routes nil (atom {})
-                              (atom {"some-id" (atom {:name "Some Job"})}) nil nil nil)
+                              (atom {"some-id" (atom {:name "Some Job"})}) nil nil nil nil)
           channel (make-async-request "/jobs/some-id" routes {:id "some-id"} false)
           response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response)) {"name" "Some Job"}))))
 
   (testing "404s when no job"
-    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
+    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil nil)
           channel (make-async-request "/jobs/foo" routes {:id "foo"} false)
           response (first @channel)]
       (is (= (:status response) 404))))
 
   (testing "gets a list of jobs"
     (let [routes (bind-routes nil (atom {}) (atom {"1" (atom {:id "1" :name "a"})
-                                               "2" (atom {:id "2" :name "b"})}) nil nil nil)
+                                               "2" (atom {:id "2" :name "b"})}) nil nil nil nil)
           channel (make-async-request "/jobs" routes {} false)
           response (first @channel)]
       (is (= (:status response) 200))
@@ -122,7 +122,7 @@
                                                    {"id" "2" "name" "b"}]))))
 
   (testing "gets an empty array when no jobs"
-    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil)
+    (let [routes (bind-routes nil (atom {}) (atom {}) nil nil nil nil)
           channel (make-async-request "/jobs" routes {} false)
           response (first @channel)]
       (is (= (:status response) 200))
@@ -132,7 +132,7 @@
     (let [server-config (atom {:jobs []})
           jobs-config (atom {})
           jobs-history (atom {})
-          routes (bind-routes nil server-config jobs-config jobs-history nil nil)
+          routes (bind-routes nil server-config jobs-config jobs-history nil nil nil)
           response (make-request :post "/jobs" routes {}
                                  "{\"name\":\"New Job\"}")]
       (is (= (:status response) 200))
@@ -150,7 +150,7 @@
   (testing "if the body is invalid, reject new job"
     (let [server-config (atom {:jobs []})
           jobs-config (atom {})
-          routes (bind-routes nil server-config jobs-config nil nil nil)
+          routes (bind-routes nil server-config jobs-config nil nil nil nil)
           response (make-request :post "/jobs" routes {}
                                  "{\"foo\":\"bar\"}")]
       (is (= (:status response) 400))))
@@ -159,7 +159,7 @@
     (let [server-config (atom {:jobs ["id"]})
           jobs-config (atom {"id" (atom {:workspace {:steps []}})})
           jobs-history (atom {})
-          routes (bind-routes nil server-config jobs-config jobs-history nil nil)
+          routes (bind-routes nil server-config jobs-config jobs-history nil nil nil)
           channel (make-async-request "/jobs/id/workspace/steps" routes {} false)
           response (first @channel)]
       (is (= (:status response) 200))
@@ -170,12 +170,21 @@
   (testing "/queue should return the current build queue"
     (let [buffer (worker/unbounded-buffer)
           build-channel (worker/build-channel buffer)
-          routes (bind-routes nil nil nil nil build-channel buffer)
+          routes (bind-routes nil nil nil nil build-channel buffer nil)
           channel (make-async-request "/queue" routes {} false)
           response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
-             [])))))
+             []))))
+
+  (testing "/workers should return the ids of those connected"
+    (let [workers (atom [{:id "foo" :thread-channel true :control-channel true}])
+          routes (bind-routes nil nil nil nil nil nil workers)
+          channel (make-async-request "/workers" routes {} false)
+          response (first @channel)]
+      (is (= (:status response) 200))
+      (is (= (json/parse-string (:body response) true)
+             [{:id "foo"}])))))
 
 
 (deftest test-build-routes

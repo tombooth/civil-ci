@@ -44,12 +44,14 @@ Options:
                  (let [job-config (data/get-job-config path repo server-config)
                        job-history (data/get-job-history path server-config)
                        build-buffer (worker/unbounded-buffer)
-                       build-channel (worker/build-channel build-buffer)]
+                       build-channel (worker/build-channel build-buffer)
+                       workers (atom (worker/create-n num-workers build-channel
+                                                      job-history docker-path))]
                          (httpkit/run-server (http/bind-routes repo server-config
                                                                job-config job-history
-                                                               build-channel build-buffer)
+                                                               build-channel build-buffer
+                                                               workers)
                                              {:port port})
-                         (worker/create-n num-workers build-channel job-history docker-path)
                          (println "Started"))
                  (println "Failed to load server.json"))
                (println "Failed to load configuration repository"))))))

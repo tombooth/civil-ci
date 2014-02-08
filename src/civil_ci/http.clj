@@ -163,7 +163,7 @@
                                                       (history-val key))))))))
 
 
-(defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer]
+(defn bind-routes [repo server-config jobs-config jobs-history build-channel build-buffer workers]
   (routes
    (GET "/jobs" []
         (state-stream jobs-config jobs-from-config))
@@ -200,6 +200,9 @@
                                  (build-routes repo id job history :build build-channel))))
 
    (GET "/queue" [] (state-stream build-buffer identity true))
+
+   (GET "/workers" [] (state-stream workers (fn [workers-val]
+                                              (map #(hash-map :id (:id %)) workers-val))))
    
    (route/not-found "Endpoint not found")))
 
