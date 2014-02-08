@@ -52,21 +52,22 @@
     (let [build-chan (async/chan)
           history (atom {:job {:workspace []}})
           docker-path (fs/absolute-path (io/resource "json-args"))
-          worker-channels (worker/create-n 1 build-chan history
-                                           docker-path)]
-      (is (= (worker/stop worker-channels)
+          workers (worker/create-n 1 build-chan history
+                                   docker-path)]
+      (is (:id (first workers)))
+      (is (= (worker/stop-all workers)
              [0]))))
 
   (testing "run one fake build"
     (let [build-chan (async/chan)
           history (atom {:job (atom {:workspace [{:id "foo"}]})})
           docker-path (fs/absolute-path (io/resource "json-args"))
-          worker-channels (worker/create-n 1 build-chan history
-                                           docker-path)
+          workers (worker/create-n 1 build-chan history
+                                   docker-path)
           build-item {:id "foo" :job-id :job :type :workspace
                       :config {:steps ["#!/bin/bash\necho foo"]}}]
       (async/>!! build-chan build-item)
       (while (not (= (-> @history :job deref :workspace first :status) "finished"))
         (Thread/sleep 100))
-      (is (= (worker/stop worker-channels)
+      (is (= (worker/stop-all workers)
              [1])))))

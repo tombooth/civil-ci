@@ -44,7 +44,6 @@
     nil))
 
 
-
 (defn unbounded-buffer [] (UnboundedBuffer. (ConcurrentLinkedQueue.)
                                             (atom {})))
 
@@ -98,17 +97,21 @@
               (recur (async/alts!! [channel control-channel]))))))))
 
 (defn create [channel history docker-path]
-  (let [control-channel (async/chan)
+  (let [id (digest/sha-1 (str (System/currentTimeMillis) (rand-int 1000)))
+        control-channel (async/chan)
         thread-channel (async/thread-call (worker-thread channel control-channel
                                                          history docker-path))]
-    [thread-channel control-channel]))
+    {:id id
+     :thread-channel thread-channel
+     :control-channel control-channel}))
 
 (defn create-n [num build-channel history docker-path]
   (doall (map #(create % history docker-path) (repeat num build-channel))))
 
-(defn stop [worker-channels]
-  (doall (map (fn [[thread-channel control-channel]]
-                (async/>!! control-channel :exit)
-                (async/<!! thread-channel))
-              worker-channels)))
+(defn stop [worker]
+  (async/>!! (:control-channel worker) :exit)
+  (async/<!! (:thread-channel worker)))
+
+(defn stop-all [workers]
+  (doall (map #(stop %) workers)))
 
