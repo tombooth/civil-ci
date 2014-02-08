@@ -72,8 +72,9 @@
 
 
 
-(defn- diff [old new]
-  (if (or (vector? new) (list? new) (seq? new))
+(defn- diff [old new ordered?]
+  (if (and (not ordered?)
+           (or (vector? new) (list? new) (seq? new)))
     (let [new-set (set new)
           old-set (set old)]
       [(vec (difference old-set new-set))
@@ -82,14 +83,15 @@
     (clojure.data/diff old new)))
 
 (defn diff-watcher
-  ([atom out-fn] (diff-watcher atom identity out-fn))
-  ([atom munge-fn out-fn]
+  ([atom out-fn] (diff-watcher atom identity false out-fn))
+  ([atom munge-fn out-fn] (diff-watcher atom munge-fn false out-fn))
+  ([atom munge-fn ordered? out-fn]
      (let [key (str (System/currentTimeMillis) (rand-int 10000))]
        (add-watch atom key (fn [_ _ old new]
                              (let [munged-old (munge-fn old)
                                    munged-new (munge-fn new)]
                                (if (not (= munged-old munged-new))
-                                 (let [[removed added _] (diff munged-old munged-new)]
+                                 (let [[removed added _] (diff munged-old munged-new ordered?)]
                                    (out-fn {:added (if (empty? added) nil added)
                                             :removed (if (empty? removed) nil removed)}))))))
        key)))
@@ -100,14 +102,15 @@
                          :body (json/generate-string {:error "Resource not found"})})
 
 (defn state-stream
-  ([state-atom] (state-stream state-atom identity))
-  ([state-atom munge-fn]
+  ([state-atom] (state-stream state-atom identity false))
+  ([state-atom munge-fn] (state-stream state-atom munge-fn false))
+  ([state-atom munge-fn ordered?]
      (fn [request]
        (with-channel request channel
          (if (not (nil? state-atom))
            (if-let [initial-value (munge-fn @state-atom)]
              (if (websocket? channel)
-               (let [key (diff-watcher state-atom munge-fn
+               (let [key (diff-watcher state-atom munge-fn ordered?
                                        (fn [changed]
                                          (send! channel (json/generate-string changed))))]
                  (on-close channel (fn [_] (remove-watch state-atom key)))
@@ -196,7 +199,7 @@
                         (context "/build" []
                                  (build-routes repo id job history :build build-channel))))
 
-   (GET "/queue" [] {:status 200 :body (json/generate-string @build-buffer)})
+   (GET "/queue" [] (state-stream build-buffer identity true))
    
    (route/not-found "Endpoint not found")))
 

@@ -1,29 +1,52 @@
 (ns civil-ci.worker
   (:require [clojure.core.async :as async]
             [civil-ci.docker :as docker])
-  (:import [java.util LinkedList]))
+  (:import [java.util.concurrent ConcurrentLinkedQueue]))
 
 
+(defn- to-seq [buf]
+  (if-let [sequence (seq (.toArray buf))]
+      sequence
+      []))
 
-(deftype UnboundedBuffer [^LinkedList buf]
+(defn- fire-watches [watches ref old new]
+  (doseq [[key watch-fn] watches]
+    (watch-fn key ref old new)))
+
+(deftype UnboundedBuffer [buf watches]
+  
   clojure.core.async.impl.protocols/Buffer
   (full? [this] false)
   (remove! [this]
-    (.removeFirst buf))
+    (let [old (to-seq buf)
+          out (.poll buf)]
+      (fire-watches @watches this old (to-seq buf))
+      out))
   (add! [this item]
-    (.addLast buf item))
+    (let [old (to-seq buf)]
+      (.add buf item)
+      (fire-watches @watches this old (to-seq buf))))
+  
   clojure.lang.Counted
   (count [this]
     (.size buf))
-  clojure.lang.IDeref
-  (deref [this]
-    (if-let [sequence (seq buf)]
-      sequence
-      [])))
+  
+  clojure.lang.IRef
+  (deref [this] (to-seq buf))
+  (setValidator [this fn] nil)
+  (getValidator [this] nil)
+  (getWatches [this] @watches)
+  (addWatch [this key fn]
+    (swap! watches assoc key fn)
+    this)
+  (removeWatch [this key]
+    (swap! watches dissoc key)
+    nil))
 
 
 
-(defn unbounded-buffer [] (UnboundedBuffer. (LinkedList.)))
+(defn unbounded-buffer [] (UnboundedBuffer. (ConcurrentLinkedQueue.)
+                                            (atom {})))
 
 (defn build-channel
   ([] (build-channel (unbounded-buffer)))

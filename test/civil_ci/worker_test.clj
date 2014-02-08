@@ -22,7 +22,22 @@
       (is (= @buffer ["foo" "bar"]))
       (is (= (async/<!! channel) "foo"))
       (is (= (count buffer) 1))
-      (is (= @buffer ["bar"])))))
+      (is (= @buffer ["bar"]))))
+
+  (testing "watchers work"
+    (let [buffer (worker/unbounded-buffer)
+          channel (worker/build-channel buffer)
+          changes (atom [])]
+      (add-watch buffer :watch (fn [& vals] (swap! changes conj vals)))
+      (async/>!! channel "foo")
+      (is (= (count @changes) 1))
+      (is (= (first @changes) [:watch buffer [] ["foo"]]))
+      (async/<!! channel)
+      (is (= (count @changes) 2))
+      (is (= (second @changes) [:watch buffer ["foo"] []]))
+      (remove-watch buffer :watch)
+      (async/>!! channel "bar")
+      (is (= (count @changes) 2)))))
 
 
 (deftest test-set-history

@@ -3,6 +3,7 @@
             [civil-ci.http :refer :all]
             [civil-ci.worker :as worker]
             [org.httpkit.server :as httpkit]
+            [clojure.core.async :as async]
             [cheshire.core :as json])
   (:import FakeChannel))
 
@@ -75,7 +76,23 @@
           sent (map #(json/parse-string % true) @channel)]
       (is (= (count sent) 1))
       (is (not (httpkit/open? channel)))
-      (is (string? (-> sent first :error))))))
+      (is (string? (-> sent first :error)))))
+
+  (testing "build queue works as expected"
+    (let [build-buffer (worker/unbounded-buffer)
+          build-channel (worker/build-channel build-buffer)
+          routes (bind-routes nil nil nil nil build-channel build-buffer)
+          channel (make-async-request "/queue" routes {} true)]
+      (async/>!! build-channel "foo")
+      (async/>!! build-channel "foo")
+      (httpkit/close channel)
+      (let [sent (map #(json/parse-string % true) @channel)]
+        (is (= (count sent) 3))
+        (is (= (-> sent first :initial) []))
+        (is (= (-> sent second :added) ["foo"]))
+        (is (= (-> sent second :removed) nil))
+        (is (= (:added (nth sent 2)) [nil "foo"]))
+        (is (= (:removed (nth sent 2)) nil))))))
 
 
 
@@ -154,7 +171,8 @@
     (let [buffer (worker/unbounded-buffer)
           build-channel (worker/build-channel buffer)
           routes (bind-routes nil nil nil nil build-channel buffer)
-          response (make-request "/queue" routes {})]
+          channel (make-async-request "/queue" routes {} false)
+          response (first @channel)]
       (is (= (:status response) 200))
       (is (= (json/parse-string (:body response) true)
              [])))))
@@ -334,6 +352,14 @@
                             (partial swap! diff-atom conj))]
       (swap! watched-atom assoc :a "c")
       (is (empty? @diff-atom))
-      (remove-watch watched-atom key))))
+      (remove-watch watched-atom key)))
+
+  (testing "when multiple of the same are added to the list it still works"
+    (let [watched-atom (atom {:foo ["foo"]})
+          diff-atom (atom [])
+          key (diff-watcher watched-atom :foo true
+                            (partial swap! diff-atom conj))]
+      (swap! watched-atom assoc :foo ["foo" "foo"])
+      (is (= @diff-atom [{:added [nil "foo"] :removed nil}])))))
 
 
