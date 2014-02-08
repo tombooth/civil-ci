@@ -29,9 +29,14 @@
 
 (defn- get-value [file repo]
   (if (fs/file? file)
-    (let [file-ref (atom (json/parse-string (slurp file) true))]
-      (add-value-watcher file-ref file repo)
-      file-ref)))
+    (try
+      (let [file-ref (atom (json/parse-string (slurp file) true))]
+        (add-value-watcher file-ref file repo)
+        file-ref)
+      (catch Exception e
+        (println "Exception when parsing file:" (fs/absolute-path file))
+        (println e)
+        nil))))
 
 (defn- assoc-file [path filename repo]
   (fn [hash id]
