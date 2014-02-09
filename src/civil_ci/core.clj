@@ -18,6 +18,7 @@ Usage:
 Options:
   -h --help                     Show this screen.
   -v --version                  Show version.
+  --ip=<ip>                     IP for web server. [default:0.0.0.0]
   --port=<port>                 Port for web server. [default:8080]
   --config-template=<url|path>  Git repo to clone when create a config directory
                                 [default:https://github.com/tombooth/civil-ci-template.git]
@@ -37,6 +38,7 @@ Options:
          
      :else (let [path (arg-map "<config-path>")
                  port (Integer/parseInt (arg-map "--port"))
+                 ip (arg-map "--ip")
                  num-workers (Integer/parseInt (arg-map "--workers"))
                  docker-path (arg-map "--docker-path")]
              (if-let [repo (git/get-or-create-config-repo path (arg-map "--config-template"))]
@@ -51,7 +53,7 @@ Options:
                                                                job-config job-history
                                                                build-channel build-buffer
                                                                workers)
-                                             {:port port})
+                                             {:port port :ip ip})
                          (println "Started"))
                  (println "Failed to load server.json"))
                (println "Failed to load configuration repository"))))))
